@@ -93,3 +93,5 @@ Role is taken **only from the verified badge**, never from the caller's claim.
   badge could be replayed by an impostor. P2 closes it with AGNTCY key-bound badges
   (server signs a client nonce = proof of possession).
 - Should `tools/list` be filtered per verified role (hide tools an agent can't call)?
+- AGNTCY badges without `expiration_date` are currently accepted (lifecycle via node
+  revocation). Require expiry instead? Decide after seeing real badges.

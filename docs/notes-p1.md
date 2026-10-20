@@ -20,6 +20,10 @@ command output here rather than guessing results.
 - Observations (how deterministic vs semantic checks decide; token exchange flow):
 
 ## Decisions for P2–P4
-- Badge verifier: ...
+- Badge verifier: `AgntcyBadgeVerifier` (identity/agntcy.py). Findings from SDK 0.0.26 +
+  node source: badges carry NO role -> role from `policies/identities.yaml`; revoked
+  badges return status=False WITH document + reason in `warnings` -> require
+  status is True and no warnings; no expiry check found in node -> enforced locally.
+  TODO when node is running: confirm these against a real revoked + expired badge.
 - Run gate in-process vs CASA sidecar: ...
 - Semantic checker approach: ...

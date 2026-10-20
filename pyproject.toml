@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+agntcy = ["agntcy-identity-sdk==0.0.26"]  # 0.0.x: pin exactly, API moves fast
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agenttrustsec"]

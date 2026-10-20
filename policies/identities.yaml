@@ -1,0 +1,13 @@
+# AgentTrustSec identity -> role map — the ISE authorization policy that assigns SGTs.
+# The AGNTCY badge proves WHO (verified id); this file decides WHAT ROLE.
+# Deny by default: an id not listed here gets no role -> BLOCK. Wildcards are rejected.
+#
+# Fill in real AGNTCY badge ids in P2 (from `identity-cli` / the Identity Service).
+
+agents:
+  reader-01: reader
+  reviewer-01: reviewer
+  executor-01: executor
+
+mcp_servers:
+  netops-mcp: mcp_server

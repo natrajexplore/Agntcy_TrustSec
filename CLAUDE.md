@@ -47,7 +47,8 @@ Explain design choices using the TrustSec analogy below — it is the project's 
 ```
 src/agenttrustsec/
   models.py            # Decision, CheckResult, ToolCall, Session dataclasses
-  identity/badge.py    # BadgeVerifier interface; LocalDevVerifier now, AGNTCY adapter later
+  identity/badge.py    # BadgeVerifier interface + LocalDevVerifier (dev HMAC)
+  identity/agntcy.py   # AgntcyBadgeVerifier (agntcy-identity-sdk 0.0.26, Identity Node)
   authz/tbac.py        # Deterministic role→tool policy engine (deny by default)
   authz/intent.py      # Semantic intent checker (baseline now, embeddings/LLM later)
   authz/gate.py        # Combines badge + TBAC + intent → ALLOW/BLOCK, writes audit
@@ -60,6 +61,7 @@ src/agenttrustsec/
   agents/              # Agent implementations (phase 5)
   transport/           # SLIM adapter (phase 3)
 policies/tbac.yaml     # The "SGACL matrix"
+policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
 eval/                  # ASTRA-based evaluation of the intent checker
 tests/                 # pytest — must stay green
@@ -73,7 +75,9 @@ tests/                 # pytest — must stay green
       not FastMCP.)
 - [ ] **P1 Learn by running** — run `agntcy/slim` examples and the `outshift-casa`
       Minikube standalone demo. Write findings to `docs/notes-p1.md`.
-- [ ] **P2 Identity** — implement `AgntcyBadgeVerifier` using the AGNTCY Identity
+- [ ] **P2 Identity** — 🟡 `AgntcyBadgeVerifier` done + tested against a fake node
+      (`uv pip install -e ".[agntcy]"`). Remaining: run a node, issue real badges,
+      replace placeholder ids in `policies/identities.yaml`. Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
 - [ ] **P3 Transport** — move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.

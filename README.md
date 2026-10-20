@@ -50,7 +50,7 @@ python -m agenttrustsec.demo
 | P0 | Scaffold: gate, TBAC, audit, mock tools, tests | ✅ |
 | PA | MCP gateway, mutual server badges, token broker for external data | ✅ |
 | P1 | Run SLIM + CASA demos, take notes | ⏳ |
-| P2 | Real AGNTCY badge issue/verify | ⏳ |
+| P2 | Real AGNTCY badge issue/verify | 🟡 verifier done; issue real badges next |
 | P3 | SLIM transport | ⏳ |
 | P4 | Semantic intent checker + ASTRA eval | ⏳ |
 | P5 | Real agents incl. firewall change reviewer + rogue | ⏳ |

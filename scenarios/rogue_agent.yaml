@@ -1,0 +1,85 @@
+# Demo: read-only ACL audit, with attacks injected mid-session.
+# badge values:
+#   valid    -> dev badge issued for this agent_id with the given role
+#   none     -> no badge presented
+#   forged   -> badge with a bad signature
+#   stolen   -> valid badge issued to a DIFFERENT agent (subject mismatch)
+#   revoked  -> valid badge that has been revoked
+
+name: Read-only ACL audit with rogue activity
+session:
+  user_prompt: "Audit the ACLs on edge-fw-01 and flag any overly permissive rules"
+  intent: read
+
+steps:
+  - label: Reader pulls the ACL
+    agent_id: reader-01
+    role: reader
+    badge: valid
+    tool: show_acl
+    args: { device: edge-fw-01 }
+    expect: ALLOW
+
+  - label: Reviewer risk-reviews the rules
+    agent_id: reviewer-01
+    role: reviewer
+    badge: valid
+    tool: review_change
+    args: { device: edge-fw-01 }
+    expect: ALLOW
+
+  - label: "T4: Reader tries to push config"
+    agent_id: reader-01
+    role: reader
+    badge: valid
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["no access-list 101"] }
+    expect: BLOCK
+
+  - label: "T5: Legit executor, prompt-injected, pushes during audit"
+    agent_id: executor-01
+    role: executor
+    badge: valid
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["permit ip any any"] }
+    expect: BLOCK
+
+  - label: "T1: Unknown agent, no badge"
+    agent_id: rogue-99
+    role: executor
+    badge: none
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["permit ip any any"] }
+    expect: BLOCK
+
+  - label: "T2: Rogue with forged executor badge"
+    agent_id: rogue-99
+    role: executor
+    badge: forged
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["permit ip any any"] }
+    expect: BLOCK
+
+  - label: "Rogue replays executor-01's stolen badge"
+    agent_id: rogue-99
+    role: executor
+    badge: stolen
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["permit ip any any"] }
+    expect: BLOCK
+
+  - label: "T3: Revoked old executor version"
+    agent_id: executor-00
+    role: executor
+    badge: revoked
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["permit ip any any"] }
+    expect: BLOCK
+
+  - label: "T6: Reader pulls unrelated BGP data (exfil-style)"
+    agent_id: reader-01
+    role: reader
+    badge: valid
+    tool: show_bgp_neighbors
+    args: { device: core-rtr-01 }
+    expect: BLOCK

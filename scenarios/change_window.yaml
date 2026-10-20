@@ -1,0 +1,23 @@
+# Control case: an approved change. Proves the gate is not "block everything".
+
+name: Approved change window
+session:
+  user_prompt: "Remove the permit ip any any rule from the ACL on edge-fw-01"
+  intent: change
+
+steps:
+  - label: Executor pushes the approved change
+    agent_id: executor-01
+    role: executor
+    badge: valid
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["no permit ip any any"] }
+    expect: ALLOW
+
+  - label: Reader still cannot push, even in a change window
+    agent_id: reader-01
+    role: reader
+    badge: valid
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["no permit ip any any"] }
+    expect: BLOCK

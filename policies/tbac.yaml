@@ -1,0 +1,37 @@
+# AgentTrustSec TBAC policy — the "SGACL matrix".
+# Deny by default: unlisted tools and unlisted roles are BLOCKED.
+# Wildcards ("*", "any", "all") are rejected by the loader.
+#
+# change: true  -> also requires session intent == change (see authz/intent.py)
+# keywords      -> baseline relevance check; replaced by semantic checker in P4
+
+tools:
+  show_running_config:
+    change: false
+    allowed_roles: [reader, executor]
+    keywords: [config, configuration, running, audit, show, backup, verify]
+    description: Read the running configuration of a device
+
+  show_acl:
+    change: false
+    allowed_roles: [reader, reviewer]
+    keywords: [acl, acls, access, rules, firewall, audit, permit, deny]
+    description: List access-control entries on a device
+
+  show_bgp_neighbors:
+    change: false
+    allowed_roles: [reader]
+    keywords: [bgp, neighbor, neighbors, peering, routing]
+    description: Show BGP neighbor state
+
+  review_change:
+    change: false
+    allowed_roles: [reviewer]
+    keywords: [review, audit, risk, acl, acls, change, firewall, rules]
+    description: Risk-review an ACL / firewall rule set or proposed change
+
+  push_config:
+    change: true
+    allowed_roles: [executor]
+    keywords: [push, apply, change, configure, deploy, remove, add, acl, acls]
+    description: Push configuration lines to a device (CHANGE)

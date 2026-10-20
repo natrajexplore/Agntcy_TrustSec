@@ -107,7 +107,8 @@ def test_gate_end_to_end_with_agntcy_verifier(policy, audit, read_session):
 
 
 def test_role_map_file_loads_and_rejects_wildcards(tmp_path):
-    assert load_role_map(ROOT / "policies" / "identities.yaml", "agents")["reader-01"] == "reader"
+    roles = load_role_map(ROOT / "policies" / "identities.yaml", "agents")
+    assert roles["AGNTCY-13cbc3cf-89ae-43d6-b5b4-b0681092b8fb"] == "reader"
     bad = tmp_path / "ids.yaml"
     bad.write_text("agents:\n  '*': executor\n")
     with pytest.raises(ValueError, match="wildcard"):

@@ -2,12 +2,13 @@
 # The AGNTCY badge proves WHO (verified id); this file decides WHAT ROLE.
 # Deny by default: an id not listed here gets no role -> BLOCK. Wildcards are rejected.
 #
-# Fill in real AGNTCY badge ids in P2 (from `identity-cli` / the Identity Service).
+# Keys are badge subjects (`credentialSubject.id` = AGNTCY metadata id), issued by
+# `agenttrustsec-lab` on the lab Identity Node — see docs/notes-p1.md, step 4.
 
 agents:
-  reader-01: reader
-  reviewer-01: reviewer
-  executor-01: executor
+  AGNTCY-13cbc3cf-89ae-43d6-b5b4-b0681092b8fb: reader      # reader-01
+  AGNTCY-c55ca3ee-802d-4209-8352-343197d644ae: reviewer    # reviewer-01
+  AGNTCY-f3f8503b-43e7-4cd1-8822-2ff32a78db84: executor    # executor-01
 
 mcp_servers:
-  netops-mcp: mcp_server
+  netops-mcp: mcp_server   # placeholder — MCP badge needs a live MCP server (pending)

@@ -76,8 +76,10 @@ tests/                 # pytest — must stay green
 - [ ] **P1 Learn by running** — run `agntcy/slim` examples and the `outshift-casa`
       Minikube standalone demo. Write findings to `docs/notes-p1.md`.
 - [ ] **P2 Identity** — 🟡 `AgntcyBadgeVerifier` done + tested against a fake node
-      (`uv pip install -e ".[agntcy]"`). Remaining: run a node, issue real badges,
-      replace placeholder ids in `policies/identities.yaml`. Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
+      (`uv pip install -e ".[agntcy]"`). Lab node (`lab/identity/`) running; 3 real agent
+      badges issued, ids in `policies/identities.yaml`, live tests in
+      `tests/test_agntcy_live.py` (skip if node down). Remaining: MCP server badge (needs
+      HTTP MCP runner), revoked-badge test (needs Revoke-RPC helper). Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
 - [ ] **P3 Transport** — move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.

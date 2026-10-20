@@ -18,6 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 agntcy = ["agntcy-identity-sdk==0.0.26"]  # 0.0.x: pin exactly, API moves fast
+slim = ["slim-bindings==3.3.6"]  # built on SLIM core 3.4.5 = lab node; pin exactly
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agenttrustsec"]

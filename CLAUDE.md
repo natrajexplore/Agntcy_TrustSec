@@ -61,7 +61,7 @@ src/agenttrustsec/
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
   agents/              # Agent implementations (phase 5)
-  transport/           # SLIM adapter (phase 3)
+  transport/slim.py    # MCP over SLIM (MLS P2P); reports + pins the peer, gate decides
 policies/tbac.yaml     # The "SGACL matrix"
 policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
@@ -87,7 +87,8 @@ tests/                 # pytest — must stay green
       so the verifier also checks the node's published copy. Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
 - [ ] **P3 Transport** — 🟡 design approved (`docs/P3-design.md`). PR1 done: per-agent keys,
-      badges re-issued with key thumbprint. Next: PR2 `transport/slim.py`.
+      badges re-issued with key thumbprint. PR2 done: `transport/slim.py` (MCP over
+      MLS SLIM, `[slim]` extra, live tests vs `lab/slim/`). Next: PR3 gate `peer` check.
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real

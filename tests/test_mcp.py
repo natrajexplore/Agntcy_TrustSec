@@ -14,7 +14,9 @@ from mcp.shared.exceptions import MCPError
 from agenttrustsec.authz.broker import TokenBroker
 from agenttrustsec.identity.badge import LocalDevVerifier
 from agenttrustsec.mcpgate.client import McpBlocked, ServerAuthError, TrustedClient
-from agenttrustsec.mcpgate.server import build_server
+from agenttrustsec.mcpgate.server import (
+    META_AGENT, META_BADGE, META_DECISION, META_SESSION, build_server,
+)
 from agenttrustsec.models import Intent, Session
 from agenttrustsec.tools import extdata, netops
 
@@ -159,16 +161,51 @@ def test_T9_agent_badge_cannot_pose_as_server(gate, verifier, broker):
                   "show_acl", {"device": "edge-fw-01"}))
 
 
-def test_unlisted_methods_refused(server):
+@pytest.mark.parametrize("probe", [lambda c: c.read_resource("file:///etc/passwd"),
+                                   lambda c: c.list_prompts()])
+def test_unlisted_methods_refused(server, probe):
     async def go():
         async with Client(server) as c:
             try:
-                await c.list_resources()
+                await probe(c)
             except MCPError as e:
                 err = e
         raise err
     with pytest.raises(MCPError, match="deny by default"):
         run(go())
+
+
+def test_resources_list_served_empty_for_badge_discovery(server):
+    async def go():
+        async with Client(server) as c:
+            return await c.list_resources()
+    assert run(go()).resources == []
+
+
+def test_badgeless_server_refuses_tools_call(gate, verifier, broker, audit):
+    # Badge-issuance mode: discoverable, but runs nothing and is audited.
+    srv = build_server(SERVER_ID, gate, broker, None, netops.REGISTRY)
+
+    async def go():
+        async with Client(srv) as c:
+            tools = await c.list_tools()
+            meta = {META_AGENT: "executor-01", META_BADGE: verifier.issue("executor-01", "executor"),
+                    META_SESSION: broker.seal_session(
+                        Session("Remove the permit any any rule on edge-fw-01", Intent.CHANGE))}
+            return tools, await c.call_tool("push_config", PUSH, meta=meta)
+    tools, r = run(go())
+    assert "push_config" in [t.name for t in tools.tools]
+    assert r.is_error and r.meta[META_DECISION]["blocked_by"] == "server_badge"
+    assert netops.PUSHED == []
+    rec, = audit.read_all()
+    assert rec["verdict"] == "BLOCK" and rec["blocked_by"] == "server_badge"
+
+
+def test_badgeless_server_fails_client_server_auth(gate, verifier, broker):
+    srv = build_server(SERVER_ID, gate, broker, None, netops.REGISTRY)
+    with pytest.raises(ServerAuthError):
+        run(_call(srv, verifier, broker, READ, "reader-01", "reader",
+                  "show_acl", {"device": "edge-fw-01"}))
 
 
 def test_one_audit_record_per_mcp_call(server, verifier, broker, audit):

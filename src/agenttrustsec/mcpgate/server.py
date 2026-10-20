@@ -37,15 +37,17 @@ META_SESSION = "agenttrustsec/session"
 META_SERVER_BADGE = "agenttrustsec/server_badge"
 META_DECISION = "agenttrustsec/decision"
 
-# Everything else (resources/*, prompts/*, completion/*, ...) is refused.
-_PASSTHROUGH = {"initialize", "server/discover", "ping", "tools/list"}
+# Everything else (resources/read, prompts/*, completion/*, ...) is refused.
+# resources/list is served for AGNTCY badge discovery (`identity badge issue mcp`); this
+# server registers no resources, so it lists nothing.
+_PASSTHROUGH = {"initialize", "server/discover", "ping", "tools/list", "resources/list"}
 
 _UNVERIFIED = Session(user_prompt="<unverified>", intent=Intent.READ,
                       session_id="unverified")
 
 
 class GateMiddleware:
-    def __init__(self, gate: Gate, broker: TokenBroker, server_badge: str):
+    def __init__(self, gate: Gate, broker: TokenBroker, server_badge: str | None):
         self.gate = gate
         self.broker = broker
         self.server_badge = server_badge
@@ -67,21 +69,15 @@ class GateMiddleware:
         tool = str(params.get("name") or "<none>")
         args = params.get("arguments") or {}
 
+        call = ToolCall(agent_id, badge, tool, _UNVERIFIED, args)
+        if not self.server_badge:   # can't prove who we are -> run nothing (badge issuance mode)
+            return self._refuse(call, CheckResult(
+                "server_badge", Status.FAIL, "server holds no badge; tools/call refused"))
         try:
             session = self.broker.open_session(meta.get(META_SESSION))
         except Exception as e:  # noqa: BLE001 - any session problem is a BLOCK
             status = Status.FAIL if isinstance(e, TokenError) else Status.ERROR
-            decision = Decision(
-                call=ToolCall(agent_id, badge, tool, _UNVERIFIED, args),
-                checks=(CheckResult("session", status, str(e)),
-                        CheckResult("badge", Status.SKIPPED, "session not verified"),
-                        CheckResult("tbac", Status.SKIPPED, "session not verified"),
-                        CheckResult("intent", Status.SKIPPED, "session not verified")),
-                verdict=Verdict.BLOCK,
-                verified_role=None,
-            )
-            self.gate.audit.write(decision)
-            return _blocked(decision)
+            return self._refuse(call, CheckResult("session", status, str(e)))
 
         decision = self.gate.authorize(ToolCall(agent_id, badge, tool, session, args))
         if decision.verdict is not Verdict.ALLOW:
@@ -96,6 +92,20 @@ class GateMiddleware:
             return await call_next(ctx)
         finally:
             CURRENT_TOKEN.reset(reset)
+
+    def _refuse(self, call: ToolCall, failed: CheckResult) -> CallToolResult:
+        skipped = f"{failed.name} not verified"
+        decision = Decision(
+            call=call,
+            checks=(failed,
+                    CheckResult("badge", Status.SKIPPED, skipped),
+                    CheckResult("tbac", Status.SKIPPED, skipped),
+                    CheckResult("intent", Status.SKIPPED, skipped)),
+            verdict=Verdict.BLOCK,
+            verified_role=None,
+        )
+        self.gate.audit.write(decision)
+        return _blocked(decision)
 
     def _stamp(self, result: Any) -> Any:
         if isinstance(result, dict):
@@ -121,7 +131,7 @@ def _blocked(d: Decision) -> CallToolResult:
     )
 
 
-def build_server(name: str, gate: Gate, broker: TokenBroker, server_badge: str,
+def build_server(name: str, gate: Gate, broker: TokenBroker, server_badge: str | None,
                  registry: dict[str, Callable[..., Any]]) -> MCPServer:
     server = MCPServer(name, middleware=[GateMiddleware(gate, broker, server_badge)])
     for tool_name, fn in registry.items():

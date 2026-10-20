@@ -89,9 +89,12 @@ Role is taken **only from the verified badge**, never from the caller's claim.
 - Run on plain Python processes first, or go straight to Kubernetes so CASA sidecars
   can be compared against the in-process gate?
 - Badge revocation: poll the Identity Service vs cache with short TTL?
-- **Known gap (dev badges):** the MCP server badge is a bearer credential, so a copied
-  badge could be replayed by an impostor. P2 closes it with AGNTCY key-bound badges
-  (server signs a client nonce = proof of possession).
+- **Known gap (bearer badges):** the MCP server badge is a bearer credential, so a copied
+  badge could be replayed by an impostor. Confirmed in P2 that AGNTCY badges don't close
+  this: the Identity Node verifies issuer signature + revocation, not key possession.
+  Proof of possession has to come from the transport (P3: SLIM/MLS sessions).
+- The MCPServerBadge signs the server's tool inventory (`identity badge issue mcp`
+  discovers it). Should the client compare live `tools/list` to the badge (drift check)?
 - Should `tools/list` be filtered per verified role (hide tools an agent can't call)?
 - AGNTCY badges without `expiration_date` are currently accepted (lifecycle via node
   revocation). Require expiry instead? Decide after seeing real badges.

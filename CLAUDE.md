@@ -55,6 +55,7 @@ src/agenttrustsec/
   authz/broker.py      # Seals sessions at intake; mints scoped single-use access tokens
   mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
   mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
+  mcpgate/serve.py     # Lab HTTP runner (127.0.0.1); fetches + verifies its own badge
   audit/log.py         # JSONL audit writer
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
@@ -78,8 +79,9 @@ tests/                 # pytest — must stay green
 - [ ] **P2 Identity** — 🟡 `AgntcyBadgeVerifier` done + tested against a fake node
       (`uv pip install -e ".[agntcy]"`). Lab node (`lab/identity/`) running; 3 real agent
       badges issued, ids in `policies/identities.yaml`, live tests in
-      `tests/test_agntcy_live.py` (skip if node down). Remaining: MCP server badge (needs
-      HTTP MCP runner), revoked-badge test (needs Revoke-RPC helper). Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
+      `tests/test_agntcy_live.py` (skip if node down). MCP server badge issued from the
+      live gateway (`python -m agenttrustsec.mcpgate.serve`). Remaining: revoked-badge
+      test (needs Revoke-RPC helper). Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
 - [ ] **P3 Transport** — move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.

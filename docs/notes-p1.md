@@ -106,6 +106,25 @@ Output (reader-01, plus extra negative cases):
 - tampered signature -> `BadgeError: identity node rejected badge: Unable to verify the integrity of the data provided.`
 - id not in role map -> `BadgeError: no role mapped for verified id`
 
+**7. MCP server badge.** The CLI discovers the server over streamable HTTP at
+`{url}/mcp` (`initialize`, `tools/list`, `resources/list`) and signs the tool
+inventory into an `MCPServerBadge`. Start the gateway badge-less (issuance mode:
+discoverable, every `tools/call` BLOCKED + audited), issue, publish, map the id in
+`policies/identities.yaml` -> `mcp_servers`, then restart it with its badge:
+```bash
+python -m agenttrustsec.mcpgate.serve --port 9090 &        # issuance mode
+identity metadata generate
+out=$(identity badge issue mcp -u http://localhost:9090 -n netops-mcp) && echo "$out"
+identity badge publish -b "${out##*: }" -i http://localhost:4000
+kill %1
+IDENTITY_NODE_GRPC_SERVER_URL=localhost:4001 IDENTITY_NODE_USE_SSL=0   python -m agenttrustsec.mcpgate.serve --port 9090 --server-id <MID>
+```
+Output (2026-10-20): metadata `AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add`, CLI badge
+`e195d433-…`, VC id `3abc3ccf-d9e0-4a3d-9a64-fd48532953df`, type `[MCPServerBadge]`, no
+expiry; signed tools: `show_running_config, show_acl, show_bgp_neighbors, review_change,
+push_config, lookup_threat_intel`; resources: none. Startup check refuses an agent's id
+(`expected MCPServerBadge, got types ['AgentBadge']`).
+
 ## CASA (github.com/outshift-open/outshift-casa)
 - [ ] `bash scripts/dev/local-setup-standalone.sh` on Minikube
 - [ ] Run safe vs compromised demo agent; screenshot Explorer UI traces

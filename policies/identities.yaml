@@ -11,4 +11,4 @@ agents:
   AGNTCY-f3f8503b-43e7-4cd1-8822-2ff32a78db84: executor    # executor-01
 
 mcp_servers:
-  netops-mcp: mcp_server   # placeholder — MCP badge needs a live MCP server (pending)
+  AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add: mcp_server   # netops-mcp (MCPServerBadge)

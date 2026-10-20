@@ -12,7 +12,9 @@ pytest.importorskip("agntcyidentity.sdk")
 
 from agenttrustsec.authz.gate import Gate  # noqa: E402
 from agenttrustsec.authz.intent import BaselineIntentChecker  # noqa: E402
-from agenttrustsec.identity.agntcy import AgntcyBadgeVerifier, load_role_map  # noqa: E402
+from agenttrustsec.identity.agntcy import (  # noqa: E402
+    MCP_SERVER_BADGE, AgntcyBadgeVerifier, load_role_map,
+)
 from agenttrustsec.identity.badge import BadgeError  # noqa: E402
 from agenttrustsec.models import ToolCall, Verdict  # noqa: E402
 
@@ -86,3 +88,55 @@ def test_gate_with_real_badges(live, policy, audit, read_session, change_session
 
     d = g.authorize(ToolCall(executor, eb, "push_config", read_session, PUSH))
     assert d.verdict is Verdict.BLOCK      # change tool in a read session
+
+
+# --- MCP mutual auth with real badges: agent AgentBadge <-> server MCPServerBadge ---
+
+SERVERS = load_role_map(ROOT / "policies" / "identities.yaml", "mcp_servers")
+SERVER_ID, = SERVERS
+
+
+def _mcp_call(gate, server_badge, agent_id, read_session, server_id=SERVER_ID):
+    import asyncio
+    import secrets
+
+    from mcp import Client
+
+    from agenttrustsec.authz.broker import TokenBroker
+    from agenttrustsec.mcpgate.client import TrustedClient
+    from agenttrustsec.mcpgate.server import build_server
+    from agenttrustsec.tools import netops
+
+    broker = TokenBroker(secrets.token_bytes(32))
+    srv = build_server("netops-mcp", gate, broker, server_badge, netops.REGISTRY)
+    server_verifier = AgntcyBadgeVerifier(SERVERS, badge_type=MCP_SERVER_BADGE)
+
+    async def go():
+        async with Client(srv) as c:
+            tc = TrustedClient(c, agent_id=agent_id, badge=published_badge(agent_id),
+                               session_token=broker.seal_session(read_session),
+                               verifier=server_verifier, server_id=server_id)
+            try:
+                return await tc.call("show_acl", {"device": "edge-fw-01"})
+            except Exception as e:  # re-raise outside the client's task group
+                err = e
+        raise err
+    return asyncio.run(go())
+
+
+def test_mcp_mutual_auth_with_real_badges(live, policy, audit, read_session):
+    from agenttrustsec.mcpgate.serve import fetch_server_badge
+    gate = Gate(live, policy, BaselineIntentChecker(), audit)
+    r = _mcp_call(gate, fetch_server_badge(NODE_HTTP, SERVER_ID), BY_ROLE["reader"],
+                  read_session)
+    assert not r.is_error
+    assert [x["verdict"] for x in audit.read_all()] == ["ALLOW"]
+
+
+def test_mcp_agent_badge_cannot_pose_as_server(live, policy, audit, read_session):
+    from agenttrustsec.mcpgate.client import ServerAuthError
+    gate = Gate(live, policy, BaselineIntentChecker(), audit)
+    executor = BY_ROLE["executor"]
+    with pytest.raises(ServerAuthError, match="expected MCPServerBadge"):
+        _mcp_call(gate, published_badge(executor), BY_ROLE["reader"], read_session,
+                  server_id=executor)

@@ -5,9 +5,10 @@ TrustSec analogy: mutual authentication. The endpoint proves itself to the switc
 on every result). A result from a server that can't prove its identity is discarded
 before the agent reads it (T9).
 
-LIMITATION (dev badges): the server badge is a bearer credential, so an impostor that
-copied a real server's badge could replay it. P2 fixes this with AGNTCY key-bound
-badges (proof of possession over a client nonce).
+LIMITATION: the server badge is a bearer credential — dev HMAC and AGNTCY badges alike
+(the Identity Node checks issuer signature + revocation, not possession of a key), so
+an impostor that copied a real server's badge could replay it. Proof of possession has
+to come from the transport (P3: SLIM/MLS-authenticated sessions).
 """
 from __future__ import annotations
 

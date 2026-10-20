@@ -5,19 +5,22 @@ TrustSec analogy: mutual authentication. The endpoint proves itself to the switc
 on every result). A result from a server that can't prove its identity is discarded
 before the agent reads it (T9).
 
-LIMITATION: the server badge is a bearer credential — dev HMAC and AGNTCY badges alike
-(the Identity Node checks issuer signature + revocation, not possession of a key), so
-an impostor that copied a real server's badge could replay it. Proof of possession has
-to come from the transport (P3: SLIM/MLS-authenticated sessions).
+Over SLIM (P3) pass `transport_peer` + `peer_binding`: the gateway must then also prove
+it holds the key bound to its badge (D2 table), so a copied server badge is useless.
+In-process / dev use without them keeps the bearer-badge limitation (no possession proof).
 """
 from __future__ import annotations
 
 from typing import Any
 
+from collections.abc import Callable
+
 from mcp import Client
 from mcp_types import CallToolResult
 
+from agenttrustsec.authz.peer import PeerBinding
 from agenttrustsec.identity.badge import BadgeError, BadgeVerifier
+from agenttrustsec.models import TransportPeer
 from agenttrustsec.mcpgate.server import (
     META_AGENT, META_BADGE, META_DECISION, META_SERVER_BADGE, META_SESSION,
 )
@@ -38,7 +41,13 @@ class McpBlocked(PermissionError):
 
 class TrustedClient:
     def __init__(self, client: Client, *, agent_id: str, badge: str | None,
-                 session_token: str, verifier: BadgeVerifier, server_id: str):
+                 session_token: str, verifier: BadgeVerifier, server_id: str,
+                 transport_peer: Callable[[], TransportPeer | None] | None = None,
+                 peer_binding: PeerBinding | None = None):
+        if (transport_peer is None) != (peer_binding is None):
+            raise ValueError("pass both transport_peer and peer_binding, or neither")
+        self.transport_peer = transport_peer
+        self.peer_binding = peer_binding
         self.client = client
         self.agent_id = agent_id
         self.badge = badge
@@ -68,6 +77,13 @@ class TrustedClient:
         if ident.role != SERVER_ROLE:
             raise ServerAuthError(
                 f"{self.server_id!r} badge has role {ident.role!r}, not {SERVER_ROLE!r}")
+        if self.peer_binding is not None:
+            try:
+                r = self.peer_binding.check(self.transport_peer(), ident)
+            except Exception as e:  # noqa: BLE001 - any doubt about the server -> distrust
+                raise ServerAuthError(f"MCP server {self.server_id!r} peer check error: {e}") from None
+            if not r.passed:
+                raise ServerAuthError(f"MCP server {self.server_id!r} not trusted: {r.reason}")
 
 
 def _text(result: CallToolResult) -> str:

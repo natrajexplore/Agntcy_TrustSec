@@ -15,7 +15,6 @@ agntcy/slim-mcp-python, which pins mcp 1.26 / bindings 1.4 and disables MLS.
 """
 from __future__ import annotations
 
-import contextvars
 import datetime
 import json
 import logging
@@ -30,6 +29,7 @@ import slim_bindings as sb
 from mcp.shared.message import SessionMessage
 
 from agenttrustsec.models import TransportPeer
+from agenttrustsec.transport.peer import CURRENT_PEER
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +44,8 @@ FIRST_MESSAGE_TIMEOUT = datetime.timedelta(seconds=30)
 SlimPeer = TransportPeer
 
 
-# The verified peer of the SLIM session serving the current MCP request (gateway side).
-PEER: contextvars.ContextVar[SlimPeer | None] = contextvars.ContextVar("slim_peer", default=None)
+# The peer of the SLIM session serving the current MCP request (gateway side).
+PEER = CURRENT_PEER
 
 
 class PeerChanged(Exception):

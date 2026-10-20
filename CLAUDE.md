@@ -57,7 +57,7 @@ src/agenttrustsec/
   authz/broker.py      # Seals sessions at intake; mints scoped single-use access tokens
   mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
   mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
-  mcpgate/serve.py     # Lab HTTP runner (127.0.0.1); fetches + verifies its own badge
+  mcpgate/serve.py     # Gateway runner: SLIM for tool calls (peer check ON); HTTP = issuance only
   audit/log.py         # JSONL audit writer
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
@@ -65,6 +65,7 @@ src/agenttrustsec/
   transport/slim.py    # MCP over SLIM (MLS P2P); reports + pins the peer, gate decides
 policies/tbac.yaml     # The "SGACL matrix"
 policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
+policies/trust-jwks.json # PUBLIC keys SLIM may accept (binding enforced by the peer check)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
 lab/identity/          # Lab Identity Node compose, OASF records, revoke_badge.py
 eval/                  # ASTRA-based evaluation of the intent checker
@@ -90,7 +91,9 @@ tests/                 # pytest — must stay green
 - [ ] **P3 Transport** — 🟡 design approved (`docs/P3-design.md`). PR1 done: per-agent keys,
       badges re-issued with key thumbprint. PR2 done: `transport/slim.py` (MCP over
       MLS SLIM, `[slim]` extra, live tests vs `lab/slim/`). PR3 done: gate `peer` check
-      (`authz/peer.py`, badge-bound key proof of possession). Next: PR4 gateway + agents on SLIM.
+      (`authz/peer.py`, badge-bound key proof of possession). PR4 done: gateway + agents on
+      SLIM (`serve.py --transport slim`, mutual peer checks, live attack matrix). Next: PR5
+      group session for the reviewer pool.
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real
@@ -108,6 +111,8 @@ uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 pytest -q
 python -m agenttrustsec.demo      # runs scenarios/rogue_agent.yaml against the gate
+# P3 gateway over SLIM (needs both lab nodes + keys): see docs/P3-design.md §7
+python -m agenttrustsec.mcpgate.serve --transport slim --server-id <gateway metadata id>
 ```
 
 ## Reference repos

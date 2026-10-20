@@ -93,10 +93,12 @@ Role is taken **only from the verified badge**, never from the caller's claim.
   can be compared against the in-process gate?
 - Badge revocation: we now query the node's published copies on EVERY verification
   (one extra gRPC call). Cache with a short TTL? That reopens a revocation window = TTL.
-- **Known gap (bearer badges):** the MCP server badge is a bearer credential, so a copied
-  badge could be replayed by an impostor. Confirmed in P2 that AGNTCY badges don't close
-  this: the Identity Node verifies issuer signature + revocation, not key possession.
-  Proof of possession has to come from the transport (P3: SLIM/MLS sessions).
+- **Bearer badges — closed over SLIM (P3 PR4):** AGNTCY badges alone are bearer (the node
+  checks issuer signature + revocation, not key possession). Over SLIM both sides must now
+  prove possession of the key their badge binds (agent: issuer-signed thumbprint; gateway:
+  D2 table) — copied agent badges and an impostor gateway with a copied MCPServerBadge are
+  BLOCKED (`tests/test_gateway_slim_live.py`, `test_gateway_impostor_live.py`). Still
+  bearer in-process / dev (no transport), which is why tool calls are SLIM-only (D4).
 - The MCPServerBadge signs the server's tool inventory (`identity badge issue mcp`
   discovers it). Should the client compare live `tools/list` to the badge (drift check)?
 - Should `tools/list` be filtered per verified role (hide tools an agent can't call)?

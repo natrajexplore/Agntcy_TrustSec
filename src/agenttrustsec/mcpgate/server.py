@@ -30,6 +30,7 @@ from agenttrustsec.authz.gate import Gate
 from agenttrustsec.models import (
     CheckResult, Decision, Intent, Session, Status, ToolCall, Verdict,
 )
+from agenttrustsec.transport.peer import CURRENT_PEER
 
 META_AGENT = "agenttrustsec/agent_id"
 META_BADGE = "agenttrustsec/badge"
@@ -69,7 +70,8 @@ class GateMiddleware:
         tool = str(params.get("name") or "<none>")
         args = params.get("arguments") or {}
 
-        call = ToolCall(agent_id, badge, tool, _UNVERIFIED, args)
+        peer = CURRENT_PEER.get()      # set by the SLIM transport; None in-process
+        call = ToolCall(agent_id, badge, tool, _UNVERIFIED, args, peer=peer)
         if not self.server_badge:   # can't prove who we are -> run nothing (badge issuance mode)
             return self._refuse(call, CheckResult(
                 "server_badge", Status.FAIL, "server holds no badge; tools/call refused"))
@@ -79,7 +81,7 @@ class GateMiddleware:
             status = Status.FAIL if isinstance(e, TokenError) else Status.ERROR
             return self._refuse(call, CheckResult("session", status, str(e)))
 
-        decision = self.gate.authorize(ToolCall(agent_id, badge, tool, session, args))
+        decision = self.gate.authorize(ToolCall(agent_id, badge, tool, session, args, peer=peer))
         if decision.verdict is not Verdict.ALLOW:
             return _blocked(decision)
 

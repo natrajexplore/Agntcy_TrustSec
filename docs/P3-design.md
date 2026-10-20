@@ -112,3 +112,32 @@ The client does the mirror check on the gateway (server-side mutual auth, closes
   badge-issuance mode (which already refuses every `tools/call`). Recommended.
 * **D5 Node admission:** keep the lab node open (127.0.0.1 only) in P3; add node mTLS/JWT
   admission in P6. Recommended.
+
+## 7. Running it (as built, PR4)
+
+```bash
+docker compose -f lab/identity/docker-compose.yml up -d    # or the upstream node
+docker compose -f lab/slim/docker-compose.yml up -d
+uv pip install -e ".[dev,agntcy,slim]"
+python lab/identity/agent_keys.py reader-01 reviewer-01 executor-01 netops-mcp     --export-jwks policies/trust-jwks.json                   # public keys only
+export AGENTTRUSTSEC_BROKER_KEY=$(python -c "import secrets;print(secrets.token_hex(32))")
+export IDENTITY_NODE_GRPC_SERVER_URL=localhost:4001 IDENTITY_NODE_USE_SSL=0
+python -m agenttrustsec.mcpgate.serve --transport slim --server-id AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add
+pytest tests/test_gateway_slim_live.py tests/test_gateway_impostor_live.py -v
+```
+
+Startup refuses (exit 2) if the gateway's key isn't the one bound to its badge or isn't
+in the trust JWKS; `--transport http --server-id` is refused (D4).
+
+Live attack matrix (2026-10-20, all as designed):
+
+| Case | Stopped by |
+|---|---|
+| genuine reader, `show_acl` | ALLOW (`badge, peer, tbac, intent` all PASS, peer audited) |
+| executor's trusted key + reader's SLIM name + reader's badge | `peer`: not signed by the badge's key |
+| reader's key presenting executor's badge | `peer`: not the badge holder |
+| token `sub` spoofed (`executor-admin`) | `peer`: identity mismatch |
+| key outside the trust JWKS | SLIM — session never forms, no audit record reaches the gate |
+| revoked agent (revoke-test-01) | `badge`: revoked |
+| genuine executor, `push_config` in a read session | `intent` (peer passes; layers still apply) |
+| impostor gateway: copied MCPServerBadge, real SLIM name, executor's key | agent: ServerAuthError, not signed by the badge's key |

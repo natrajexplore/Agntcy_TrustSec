@@ -24,6 +24,7 @@ class ToolSpec:
     allowed_roles: frozenset[str]
     keywords: frozenset[str] = field(default_factory=frozenset)
     description: str = ""
+    audience: str | None = None  # external resource reached via a brokered token
 
 
 class TbacPolicy:
@@ -50,6 +51,7 @@ class TbacPolicy:
                 allowed_roles=frozenset(roles),
                 keywords=frozenset(k.lower() for k in spec.get("keywords", [])),
                 description=spec.get("description", ""),
+                audience=spec.get("audience"),
             )
         return cls(tools)
 

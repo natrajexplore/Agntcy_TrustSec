@@ -6,6 +6,9 @@
 2. Agent-to-agent traffic is end-to-end encrypted and needs no inbound ports (SLIM + MLS).
 3. Tool access is least-privilege by role (TBAC) **and** scoped to the user's intent.
 4. Every decision is explainable after the fact.
+5. Agents and MCP servers authenticate **mutually**: the server proves its identity back.
+6. No agent or MCP server holds a standing secret for external data; access is via
+   short-lived, single-use tokens scoped to one tool + audience + session.
 
 ## 2. Actors
 
@@ -34,6 +37,27 @@ ToolCall(agent_id, badge, tool, args, session)
 
 Role is taken **only from the verified badge**, never from the caller's claim.
 
+## 3a. MCP enforcement point + external data (`mcpgate/`, `authz/broker.py`)
+
+```
+ Intake ──seal_session()──► sealed session token (intent + prompt, signed)
+   │
+ Agent ── TrustedClient ── tools/call  _meta{agent_id, badge, session} ──►  MCP server
+   ▲                                                                   │ GateMiddleware
+   │                                                [0] session token valid? (T11)
+   │                                                [1-3] Gate: badge → TBAC → intent
+   │                                                ALLOW + tool has `audience`:
+   │                                                   broker.mint(agent, tool, sid, aud)
+   │                                                   tool → External API.redeem(token)
+   └── result _meta{server_badge} ◄── agent verifies server badge (T9) before using result
+```
+
+* Only `initialize`, `server/discover`, `ping`, `tools/list`, `tools/call` are served;
+  every other MCP method is refused (deny by default).
+* Access tokens: TTL 60 s, single use, bound to `aud` + `tool` + `sub` + `sid`.
+* TrustSec analogy: ISE pushing a per-session authorization profile instead of a
+  shared static key on every switch.
+
 ## 4. Threat model (what each layer stops)
 
 | # | Attack | Stopped by |
@@ -46,6 +70,9 @@ Role is taken **only from the verified badge**, never from the caller's claim.
 | T6 | Allowed tool but irrelevant to request (data exfil via `show_running_config` on unrelated device) | [3] semantic → BLOCK (P4) |
 | T7 | Eavesdrop / tamper on agent traffic | SLIM MLS (P3) |
 | T8 | Agent exposed via inbound port gets scanned/attacked | SLIM outbound-only (P3) |
+| T9 | Fake / impostor MCP server feeds poisoned results | client verifies server badge (`mcpgate/client.py`) |
+| T10 | Leaked or replayed external-data token | broker: TTL + single-use + aud/tool scope |
+| T11 | Agent self-upgrades session intent `read` → `change` over the wire | intake-sealed session token |
 
 ## 5. Phase mapping to AGNTCY / Outshift components
 
@@ -62,3 +89,7 @@ Role is taken **only from the verified badge**, never from the caller's claim.
 - Run on plain Python processes first, or go straight to Kubernetes so CASA sidecars
   can be compared against the in-process gate?
 - Badge revocation: poll the Identity Service vs cache with short TTL?
+- **Known gap (dev badges):** the MCP server badge is a bearer credential, so a copied
+  badge could be replayed by an impostor. P2 closes it with AGNTCY key-bound badges
+  (server signs a client nonce = proof of possession).
+- Should `tools/list` be filtered per verified role (hide tools an agent can't call)?

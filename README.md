@@ -29,6 +29,11 @@ audit trail shows exactly which layer stopped it.
  Transport between agents: SLIM sessions, MLS end-to-end encrypted (≈ MACsec)
 ```
 
+**MCP servers & external data:** the same Gate runs as MCP server middleware
+(`mcpgate/`). Agents and MCP servers authenticate *mutually* (server badge on every
+result), intent is sealed at intake so it can't be self-upgraded, and external APIs
+are reached only with short-lived, single-use tokens minted per allowed call.
+
 ## Quick start
 
 ```bash
@@ -43,6 +48,7 @@ python -m agenttrustsec.demo
 | Phase | What | State |
 |---|---|---|
 | P0 | Scaffold: gate, TBAC, audit, mock tools, tests | ✅ |
+| PA | MCP gateway, mutual server badges, token broker for external data | ✅ |
 | P1 | Run SLIM + CASA demos, take notes | ⏳ |
 | P2 | Real AGNTCY badge issue/verify | ⏳ |
 | P3 | SLIM transport | ⏳ |

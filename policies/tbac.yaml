@@ -4,6 +4,8 @@
 #
 # change: true  -> also requires session intent == change (see authz/intent.py)
 # keywords      -> baseline relevance check; replaced by semantic checker in P4
+# audience      -> external data source this tool reaches. On ALLOW the broker mints a
+#                  short-lived, single-use token for exactly this audience + tool.
 
 tools:
   show_running_config:
@@ -35,3 +37,10 @@ tools:
     allowed_roles: [executor]
     keywords: [push, apply, change, configure, deploy, remove, add, acl, acls]
     description: Push configuration lines to a device (CHANGE)
+
+  lookup_threat_intel:
+    change: false
+    allowed_roles: [reader, reviewer]
+    keywords: [threat, intel, reputation, malicious, ip, ioc]
+    audience: threat-intel-api
+    description: Look up IP reputation in an external threat-intel API

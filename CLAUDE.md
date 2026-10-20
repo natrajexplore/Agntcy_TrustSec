@@ -19,6 +19,8 @@ Explain design choices using the TrustSec analogy below — it is the project's 
 | MACsec / encrypted fabric       | SLIM sessions with MLS end-to-end encryption              |
 | Enforcement point (switch)      | `authz/gate.py` (later: CASA-style sidecar)               |
 | ISE Live Logs                   | `audit/decisions.jsonl` + dashboard                       |
+| Switch authenticating to ISE    | MCP server badge verified by the agent (mutual auth)      |
+| Per-session dACL / authz profile| Broker-minted, single-use token scoped to tool + audience |
 
 ## Non-negotiable rules
 
@@ -49,8 +51,12 @@ src/agenttrustsec/
   authz/tbac.py        # Deterministic role→tool policy engine (deny by default)
   authz/intent.py      # Semantic intent checker (baseline now, embeddings/LLM later)
   authz/gate.py        # Combines badge + TBAC + intent → ALLOW/BLOCK, writes audit
+  authz/broker.py      # Seals sessions at intake; mints scoped single-use access tokens
+  mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
+  mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
   audit/log.py         # JSONL audit writer
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
+  tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
   agents/              # Agent implementations (phase 5)
   transport/           # SLIM adapter (phase 3)
 policies/tbac.yaml     # The "SGACL matrix"
@@ -62,6 +68,9 @@ tests/                 # pytest — must stay green
 ## Build phases (do them in order; one PR-sized step at a time)
 
 - [x] **P0 Scaffold** — models, TBAC engine, gate, audit, mock tools, tests.
+- [x] **PA MCP + external data** — MCP gateway middleware, mutual server badges,
+      sealed sessions, token broker. Threats T9–T11. (`mcp` SDK is **2.x**: `MCPServer`,
+      not FastMCP.)
 - [ ] **P1 Learn by running** — run `agntcy/slim` examples and the `outshift-casa`
       Minikube standalone demo. Write findings to `docs/notes-p1.md`.
 - [ ] **P2 Identity** — implement `AgntcyBadgeVerifier` using the AGNTCY Identity

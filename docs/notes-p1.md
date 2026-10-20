@@ -21,7 +21,8 @@ command output here rather than guessing results.
     (CLI-local id, used only for `publish -b`). Our verifier uses the VC `id`.
   - CLI prompts on stdin for anything not given as a flag -> pass `-i`, `-b` etc.
     `badge issue oasf` takes `-o` (upstream README shows `-f`).
-  - Revocation: still untested (no CLI command). Expiry: nothing to test (none set).
+  - Revocation: tested via `lab/identity/revoke_badge.py` (step 8) — node Verify only
+    checks the presented copy (gap; fixed in our verifier). Expiry: nothing to test (none set).
 
 ### Runbook (Git Bash, from the repo root) — paste output under each step
 
@@ -29,7 +30,7 @@ Facts from upstream v0.0.26 source (commit `8f7c1b5`): node HTTP `:4000` (CLI,
 `.well-known`), gRPC `:4001` (Python SDK). Badge subject `content.id` = the
 **metadata id** -> one `metadata generate` per agent; those ids key
 `policies/identities.yaml`. No `revoke` CLI command (node `Revoke` RPC needs an
-issuer-signed proof) and the CLI sets no expiry -> revoked/expired TODO stays open.
+issuer-signed proof -> `lab/identity/revoke_badge.py`, step 8) and the CLI sets no expiry.
 Don't clone upstream on Windows (`Filename too long`; `launch_node.sh` uses `ln -s`).
 
 **0. Node.** Already running from upstream compose (`identity-node`, `:latest` = 0.0.26
@@ -125,6 +126,30 @@ expiry; signed tools: `show_running_config, show_acl, show_bgp_neighbors, review
 push_config, lookup_threat_intel`; resources: none. Startup check refuses an agent's id
 (`expected MCPServerBadge, got types ['AgentBadge']`).
 
+**8. Revocation** (throwaway badge `revoke-test-01`, never mapped to a role). The v0.0.26
+CLI has no revoke command; the node's `Revoke` RPC takes the SAME VC re-signed by the
+issuer with a `credentialStatus` of purpose `CREDENTIAL_STATUS_PURPOSE_REVOCATION`, plus
+a self-issued JWT proof (`iss agntcy:<cn>`, `sub`=`aud`= metadata id minus `AGNTCY-`).
+`lab/identity/revoke_badge.py` does that; it reads the issuer key from
+`~/.identity/vault.json` in memory only (dry run unless `--yes`; IRREVERSIBLE).
+```bash
+identity metadata generate
+out=$(identity badge issue oasf -o lab/identity/oasf/revoke-test-01.json) && echo "$out"
+identity badge publish -b "${out##*: }" -i http://localhost:4000
+curl -s http://localhost:4000/v1alpha1/vc/<MID>/.well-known/vcs.json   # keep: original copy
+python lab/identity/revoke_badge.py <MID>          # dry run
+python lab/identity/revoke_badge.py <MID> --yes
+```
+Output (2026-10-20): metadata `AGNTCY-ad860353-453a-4d71-9190-e1f32ca0947a`, VC
+`315020a4-330d-4816-8898-1c9dbfa0f47d` -> `revoked VC 315020a4-…`. Then:
+- `.well-known` now serves 1 VC, same id, carrying the REVOCATION status
+- node Verify, revoked copy  -> `status=False`, warning `The Verifiable Credential is revoked.`
+- node Verify, **original copy -> `status=True`, no warnings** (the node never consults
+  its stored copy — `vc.ValidateStatus()` runs on the presented JOSE only)
+- our verifier BEFORE the fix: revoked copy BLOCK, **original copy ALLOWED** (gap)
+- AFTER (published-copy status check): both copies -> `BadgeError: ... revoked`
+  (`tests/test_agntcy_live.py`, fixture `tests/fixtures/revoke-test-01.original.jose`)
+
 ## CASA (github.com/outshift-open/outshift-casa)
 - [ ] `bash scripts/dev/local-setup-standalone.sh` on Minikube
 - [ ] Run safe vs compromised demo agent; screenshot Explorer UI traces
@@ -136,6 +161,7 @@ push_config, lookup_threat_intel`; resources: none. Startup check refuses an age
   badges return status=False WITH document + reason in `warnings` -> require
   status is True and no warnings; no expiry check found in node -> enforced locally.
   Confirmed against a real node (2026-10-20): genuine/tampered/subject/role paths.
-  TODO: revoked badge (needs a Revoke-RPC helper); expiry (CLI sets none).
+  Revocation (step 8): node Verify checks only the presented copy -> verifier also
+  requires the VC id in the node's published copies, not revoked. Expiry: CLI sets none.
 - Run gate in-process vs CASA sidecar: ...
 - Semantic checker approach: ...

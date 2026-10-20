@@ -90,6 +90,28 @@ def test_gate_with_real_badges(live, policy, audit, read_session, change_session
     assert d.verdict is Verdict.BLOCK      # change tool in a read session
 
 
+# --- Revocation (docs/notes-p1.md step 8): throwaway badge, revoked on the node -------
+
+REVOKED_ID = "AGNTCY-ad860353-453a-4d71-9190-e1f32ca0947a"   # revoke-test-01; no role
+ORIGINAL = (ROOT / "tests" / "fixtures" / "revoke-test-01.original.jose").read_text().strip()
+
+
+@pytest.fixture(scope="module")
+def revoked_published():
+    try:
+        return published_badge(REVOKED_ID)
+    except Exception:  # noqa: BLE001 - a different lab node never issued it
+        pytest.skip("revoke-test-01 not on this node")
+
+
+@pytest.mark.parametrize("which", ["published", "original"])
+def test_revoked_badge_blocked_whichever_copy_is_presented(revoked_published, which):
+    jose = revoked_published if which == "published" else ORIGINAL
+    v = AgntcyBadgeVerifier({REVOKED_ID: "reader"})   # test-only map
+    with pytest.raises(BadgeError, match="revoked"):
+        v.verify(jose, REVOKED_ID)
+
+
 # --- MCP mutual auth with real badges: agent AgentBadge <-> server MCPServerBadge ---
 
 SERVERS = load_role_map(ROOT / "policies" / "identities.yaml", "mcp_servers")

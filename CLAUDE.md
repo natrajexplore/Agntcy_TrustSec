@@ -64,6 +64,7 @@ src/agenttrustsec/
 policies/tbac.yaml     # The "SGACL matrix"
 policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
+lab/identity/          # Lab Identity Node compose, OASF records, revoke_badge.py
 eval/                  # ASTRA-based evaluation of the intent checker
 tests/                 # pytest — must stay green
 ```
@@ -76,12 +77,13 @@ tests/                 # pytest — must stay green
       not FastMCP.)
 - [ ] **P1 Learn by running** — run `agntcy/slim` examples and the `outshift-casa`
       Minikube standalone demo. Write findings to `docs/notes-p1.md`.
-- [ ] **P2 Identity** — 🟡 `AgntcyBadgeVerifier` done + tested against a fake node
+- [x] **P2 Identity** — `AgntcyBadgeVerifier` done + tested against a fake node
       (`uv pip install -e ".[agntcy]"`). Lab node (`lab/identity/`) running; 3 real agent
       badges issued, ids in `policies/identities.yaml`, live tests in
       `tests/test_agntcy_live.py` (skip if node down). MCP server badge issued from the
-      live gateway (`python -m agenttrustsec.mcpgate.serve`). Remaining: revoked-badge
-      test (needs Revoke-RPC helper). Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
+      live gateway (`python -m agenttrustsec.mcpgate.serve`). Revocation via
+      `lab/identity/revoke_badge.py`; node Verify misses replayed pre-revocation copies,
+      so the verifier also checks the node's published copy. Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
 - [ ] **P3 Transport** — move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.

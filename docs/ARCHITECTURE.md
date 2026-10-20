@@ -64,7 +64,7 @@ Role is taken **only from the verified badge**, never from the caller's claim.
 |---|---|---|
 | T1 | Unknown agent calls a tool | [1] badge missing → BLOCK |
 | T2 | Forged / tampered badge | [1] signature fail → BLOCK |
-| T3 | Revoked agent (old version) keeps acting | [1] revocation → BLOCK |
+| T3 | Revoked agent (old version) keeps acting | [1] revocation → BLOCK: node Verify + VC id must be in the node's published copies and not revoked (node alone misses a replayed pre-revocation copy) |
 | T4 | Reader agent tries `push_config` | [2] TBAC → BLOCK |
 | T5 | Legit executor pushes config during a read-only audit (prompt injection) | [3] intent → BLOCK |
 | T6 | Allowed tool but irrelevant to request (data exfil via `show_running_config` on unrelated device) | [3] semantic → BLOCK (P4) |
@@ -88,7 +88,8 @@ Role is taken **only from the verified badge**, never from the caller's claim.
 - Semantic checker: embeddings only (fast) vs LLM verifier (accurate)? Measure on ASTRA.
 - Run on plain Python processes first, or go straight to Kubernetes so CASA sidecars
   can be compared against the in-process gate?
-- Badge revocation: poll the Identity Service vs cache with short TTL?
+- Badge revocation: we now query the node's published copies on EVERY verification
+  (one extra gRPC call). Cache with a short TTL? That reopens a revocation window = TTL.
 - **Known gap (bearer badges):** the MCP server badge is a bearer credential, so a copied
   badge could be replayed by an impostor. Confirmed in P2 that AGNTCY badges don't close
   this: the Identity Node verifies issuer signature + revocation, not key possession.

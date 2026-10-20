@@ -27,6 +27,7 @@ class VerifiedIdentity:
     agent_id: str
     role: str
     badge_id: str
+    key_thumbprint: str | None = None   # RFC 7638; the key the badge binds (P3)
 
 
 class BadgeVerifier(Protocol):

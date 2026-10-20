@@ -52,7 +52,8 @@ src/agenttrustsec/
   identity/keys.py     # RFC 7638 thumbprints of the agent keys badges bind (P3)
   authz/tbac.py        # Deterministic role→tool policy engine (deny by default)
   authz/intent.py      # Semantic intent checker (baseline now, embeddings/LLM later)
-  authz/gate.py        # Combines badge + TBAC + intent → ALLOW/BLOCK, writes audit
+  authz/gate.py        # Combines badge + [peer] + TBAC + intent → ALLOW/BLOCK, writes audit
+  authz/peer.py        # P3: transport identity must hold the key the badge binds
   authz/broker.py      # Seals sessions at intake; mints scoped single-use access tokens
   mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
   mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
@@ -88,7 +89,8 @@ tests/                 # pytest — must stay green
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
 - [ ] **P3 Transport** — 🟡 design approved (`docs/P3-design.md`). PR1 done: per-agent keys,
       badges re-issued with key thumbprint. PR2 done: `transport/slim.py` (MCP over
-      MLS SLIM, `[slim]` extra, live tests vs `lab/slim/`). Next: PR3 gate `peer` check.
+      MLS SLIM, `[slim]` extra, live tests vs `lab/slim/`). PR3 done: gate `peer` check
+      (`authz/peer.py`, badge-bound key proof of possession). Next: PR4 gateway + agents on SLIM.
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real

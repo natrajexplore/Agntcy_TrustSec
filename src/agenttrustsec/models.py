@@ -38,12 +38,22 @@ class Session:
 
 
 @dataclass(frozen=True)
+class TransportPeer:
+    """Who the transport says is on the other end (P3: SLIM). Not yet a trust decision —
+    the gate's `peer` check binds it to the verified badge's key."""
+    source_name: str   # routing name the peer sent from
+    subject: str       # `sub` of the peer's identity token
+    token: str         # the peer's signed identity token (never audited)
+
+
+@dataclass(frozen=True)
 class ToolCall:
     agent_id: str          # who the caller CLAIMS to be
     badge: str | None      # credential presented (None = no credential)
     tool: str
     session: Session
     args: dict[str, Any] = field(default_factory=dict)
+    peer: TransportPeer | None = None   # set by the SLIM transport; None in-process
 
 
 @dataclass(frozen=True)
@@ -83,6 +93,8 @@ class Decision:
             "user_prompt": self.call.session.user_prompt,
             "agent_id": self.call.agent_id,
             "badge_presented": self.call.badge is not None,
+            "peer": ({"source_name": self.call.peer.source_name,
+                      "subject": self.call.peer.subject} if self.call.peer else None),
             "verified_role": self.verified_role,
             "tool": self.call.tool,
             "args": self.call.args,

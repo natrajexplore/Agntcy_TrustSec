@@ -12,3 +12,9 @@ agents:
 
 mcp_servers:
   AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add: mcp_server   # netops-mcp (MCPServerBadge)
+
+# D2 (docs/P3-design.md): keys bound OUTSIDE the badge. Only for badges that cannot carry
+# a key — the MCPServerBadge is built from MCP discovery. Agent badges bind their key
+# inside the issuer signature; a conflict with this table is a BadgeError.
+key_thumbprints:
+  AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add: 5q9tysl6LGnq_Z5s9UNy9IWFqa5V9-4xYCRsLPkTgIc   # netops-mcp

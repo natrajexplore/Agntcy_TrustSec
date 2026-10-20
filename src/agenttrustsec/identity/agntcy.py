@@ -31,6 +31,7 @@ from typing import Any, Callable
 import yaml
 
 from agenttrustsec.identity.badge import BadgeError, VerifiedIdentity
+from agenttrustsec.identity.keys import THUMBPRINT_ANNOTATION
 
 AGENT_BADGE = "AgentBadge"
 MCP_SERVER_BADGE = "MCPServerBadge"
@@ -83,10 +84,13 @@ def load_role_map(path: str | Path, section: str) -> dict[str, str]:
 
 class AgntcyBadgeVerifier:
     def __init__(self, role_map: dict[str, str], *, badge_type: str = AGENT_BADGE,
-                 node: NodeVerify | None = None, published: NodePublished | None = None):
+                 node: NodeVerify | None = None, published: NodePublished | None = None,
+                 key_thumbprints: dict[str, str] | None = None):
         if (node is None) != (published is None):
             raise ValueError("pass both node and published, or neither (no partial checks)")
         self.role_map = dict(role_map)
+        # D2: keys bound outside the badge (an MCPServerBadge can't carry one)
+        self.key_thumbprints = dict(key_thumbprints or {})
         self.badge_type = badge_type
         self._node = node
         self._published = published
@@ -125,7 +129,16 @@ class AgntcyBadgeVerifier:
         role = self.role_map.get(subject)
         if not role:
             raise BadgeError(f"no role mapped for verified id {subject!r}")
-        return VerifiedIdentity(agent_id=subject, role=role, badge_id=doc.id or subject)
+        return VerifiedIdentity(agent_id=subject, role=role, badge_id=doc.id or subject,
+                                key_thumbprint=self._bound_key(subject, doc.content))
+
+    def _bound_key(self, subject: str, content: Any) -> str | None:
+        signed = _badge_thumbprint(content)
+        mapped = self.key_thumbprints.get(subject)
+        if signed and mapped and signed != mapped:
+            raise BadgeError(f"key conflict for {subject!r}: badge binds {signed}, "
+                             f"identities.yaml binds {mapped}")
+        return signed or mapped
 
 
     def _check_published_status(self, subject: str, vc_id: str) -> None:
@@ -143,6 +156,28 @@ class AgntcyBadgeVerifier:
         if any(s.get("purpose") == REVOKED
                for vc in current for s in (vc.get("credentialStatus") or [])):
             raise BadgeError(f"badge {vc_id!r} revoked (node's published copy)")
+
+
+def _badge_thumbprint(content: Any) -> str | None:
+    """The key thumbprint the issuer signed into an OASF AgentBadge, if any."""
+    try:
+        record = json.loads(content["badge"]) if "badge" in content else None
+    except (TypeError, ValueError):
+        return None
+    annotations = record.get("annotations") if isinstance(record, dict) else None
+    value = annotations.get(THUMBPRINT_ANNOTATION) if isinstance(annotations, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
+def load_key_thumbprints(path: str | Path) -> dict[str, str]:
+    raw = yaml.safe_load(Path(path).read_text()) or {}
+    entries = raw.get("key_thumbprints") or {}
+    if not isinstance(entries, dict):
+        raise ValueError("key_thumbprints: must be a mapping of badge id -> thumbprint")
+    for ident, thumb in entries.items():
+        if any(w in (str(ident), str(thumb)) for w in ("*", "any", "all")):
+            raise ValueError("key_thumbprints: wildcards are forbidden (deny by default)")
+    return {str(k): str(v) for k, v in entries.items()}
 
 
 def _reasons(result: Any) -> str:

@@ -29,6 +29,8 @@ import mcp_types
 import slim_bindings as sb
 from mcp.shared.message import SessionMessage
 
+from agenttrustsec.models import TransportPeer
+
 log = logging.getLogger(__name__)
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:46357"
@@ -38,12 +40,8 @@ PEER_SUBJECT = "slim-peer-subject"
 FIRST_MESSAGE_TIMEOUT = datetime.timedelta(seconds=30)
 
 
-@dataclass(frozen=True)
-class SlimPeer:
-    """Who is on the other end, as SLIM reports it. Not yet a trust decision."""
-    source_name: str   # routing name the peer published from
-    subject: str       # `sub` of its token (SLIM checked the signature vs the trust JWKS)
-    token: str         # the peer's signed identity token, for the gate to re-verify
+# Who is on the other end as SLIM reports it (SLIM checked the token vs the trust JWKS).
+SlimPeer = TransportPeer
 
 
 # The verified peer of the SLIM session serving the current MCP request (gateway side).
@@ -60,6 +58,9 @@ def jwt_identity(private_key_pem: str, subject: str, trust_jwks: list[dict[str, 
     """(provider, verifier) for SLIM JWT identity: sign with our key, trust only `trust_jwks`."""
     if not trust_jwks:
         raise ValueError("empty trust JWKS would trust no one — refusing")
+    if any(k.get("alg") != "RS256" for k in trust_jwks):
+        # SLIM silently ignores keys without alg -> fail loudly instead (identity/keys.trust_jwk)
+        raise ValueError("every trust JWK needs alg=RS256 (SLIM ignores keys without it)")
     enc = sb.JwtKeyConfig(algorithm=sb.JwtAlgorithm.RS256, format=sb.JwtKeyFormat.PEM,
                           key=sb.JwtKeyData.DATA(value=private_key_pem))
     dec = sb.JwtKeyConfig(algorithm=sb.JwtAlgorithm.RS256, format=sb.JwtKeyFormat.JWKS,

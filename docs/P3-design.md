@@ -37,7 +37,9 @@ Each agent (and the gateway) gets its **own RSA key pair**. The issuer signs the
   tools, resources) — we can't add fields. See decision **D2**.
 * SLIM names: `agenttrustsec/lab/<metadata-id>` (lower-cased); token `sub` = that name.
 
-**Gate check `peer` (new, runs before `badge`), all must hold, any error → BLOCK:**
+**Gate check `peer` (new), all must hold, any error → BLOCK:**
+*As built (PR3): it runs right AFTER `badge`, because steps 4–5 need the key the verified
+badge binds. A failed `peer` voids the role (TBAC/intent SKIPPED, `verified_role` None).*
 1. SLIM already verified the token against the trust JWKS (the registered keys).
 2. Decode the token; `sub` == `slim-peer-subject` == routing `source_name`.
 3. The presented badge passes today's checks (node signature, published + not revoked,
@@ -70,6 +72,18 @@ The client does the mirror check on the gateway (server-side mutual auth, closes
 | Revoked agent | BLOCK at `badge` (published-status check, P2) |
 | SLIM node / network reads tool args | MLS ciphertext only |
 | **Remaining:** anyone can connect to the lab node (no node admission auth, plaintext hop) | Node can be flooded / sees metadata (names, sizes). Node mTLS/JWT admission = D5 |
+
+## 4b. Found while building (PR2–PR3)
+
+* **SLIM silently ignores trust JWKs without `alg`** — such an agent can never connect and
+  nothing says why. `transport.slim.jwt_identity` now refuses them; `identity/keys.trust_jwk`
+  always emits `alg/use/kid`.
+* **Re-using a SLIM name inside one process after a session fails** (both the old and a new
+  key are then rejected) — looks like stale routing to the old instance; not root-caused.
+  Tests run such exchanges in fresh processes. Not a security bypass (it fails closed),
+  but a gateway restart/re-registration path to watch in PR4.
+* Name→key binding in SLIM is NOT key pinning: the order test (attacker first, then the
+  real agent) showed no first-use pinning — both were rejected on reuse.
 
 ## 5. Work order (one PR each)
 

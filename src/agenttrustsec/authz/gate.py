@@ -1,10 +1,12 @@
-"""The enforcement point. Badge -> TBAC -> Intent. ALLOW only if all PASS.
+"""The enforcement point. Badge -> [Peer] -> TBAC -> Intent. ALLOW only if all PASS.
 
 Rules enforced here (see CLAUDE.md):
   * Deny by default; any exception in a check becomes ERROR -> BLOCK.
   * Role comes only from the verified badge.
   * Exactly one audit record per call, including blocked calls.
   * A tool function is never invoked unless the verdict is ALLOW.
+  * With a PeerBinding (P3, SLIM deployments) the `peer` check is mandatory: a call
+    without a transport identity bound to the badge's key is BLOCKED.
 """
 from __future__ import annotations
 
@@ -12,6 +14,7 @@ from typing import Any, Callable
 
 from agenttrustsec.audit.log import AuditLog
 from agenttrustsec.authz.intent import IntentChecker
+from agenttrustsec.authz.peer import PeerBinding
 from agenttrustsec.authz.tbac import TbacPolicy
 from agenttrustsec.identity.badge import BadgeError, BadgeVerifier
 from agenttrustsec.models import CheckResult, Decision, Status, ToolCall, Verdict
@@ -25,8 +28,9 @@ class BlockedError(PermissionError):
 
 class Gate:
     def __init__(self, verifier: BadgeVerifier, policy: TbacPolicy,
-                 intent: IntentChecker, audit: AuditLog):
+                 intent: IntentChecker, audit: AuditLog, peer: PeerBinding | None = None):
         self.verifier = verifier
+        self.peer = peer
         self.policy = policy
         self.intent = intent
         self.audit = audit
@@ -34,6 +38,7 @@ class Gate:
     def authorize(self, call: ToolCall) -> Decision:
         checks: list[CheckResult] = []
         role: str | None = None
+        ident = None
 
         # [1] Identity
         try:
@@ -45,6 +50,18 @@ class Gate:
             checks.append(CheckResult("badge", Status.FAIL, str(e)))
         except Exception as e:  # noqa: BLE001 - deny on any unexpected error
             checks.append(CheckResult("badge", Status.ERROR, f"{type(e).__name__}: {e}"))
+
+        # [1b] Peer: the transport identity must hold the key the badge binds
+        if self.peer is not None:
+            if ident is None:
+                checks.append(CheckResult("peer", Status.SKIPPED, "no verified badge"))
+            else:
+                try:
+                    checks.append(self.peer.check(call.peer, ident))
+                except Exception as e:  # noqa: BLE001
+                    checks.append(CheckResult("peer", Status.ERROR, f"{type(e).__name__}: {e}"))
+                if not checks[-1].passed:
+                    role = None     # a badge not bound to this peer verifies no one
 
         # [2] TBAC
         if role is None:
@@ -66,7 +83,8 @@ class Gate:
                 checks.append(CheckResult("intent", Status.ERROR, f"{type(e).__name__}: {e}"))
 
         evaluated = [c for c in checks if c.status is not Status.SKIPPED]
-        allow = len(evaluated) == 3 and all(c.passed for c in evaluated)
+        required = 4 if self.peer is not None else 3
+        allow = len(evaluated) == required and all(c.passed for c in evaluated)
         decision = Decision(
             call=call,
             checks=tuple(checks),

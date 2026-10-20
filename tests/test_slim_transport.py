@@ -78,6 +78,11 @@ def run_exchange(agent_pem, agent_sub, trust, *, agent_name=None):
             return r.content[0].text, rec.seen, transport.peer, ag_name, gw_name
         finally:
             serving.cancel()
+            for ep in (gw, ag):     # free the names for the next exchange in this process
+                try:
+                    await ep.app.unsubscribe_async(ep.app.name(), ep.conn_id)
+                except Exception as e:  # noqa: BLE001 - best-effort test teardown
+                    print(f"unsubscribe {ep.name}: {e}")
     return asyncio.run(asyncio.wait_for(go(), 60))
 
 
@@ -106,6 +111,13 @@ def test_spoofed_subject_is_reported_not_hidden():
     _, seen, _, ag_name, _ = run_exchange(pem, "agenttrustsec/lab/executor-admin", [jwk])
     peer, = seen
     assert peer.source_name == ag_name and peer.subject == "agenttrustsec/lab/executor-admin"
+
+
+def test_trust_jwk_without_alg_refused():
+    # SLIM would silently skip it and the agent could never connect — fail loudly.
+    pem, jwk = keypair("x")
+    with pytest.raises(ValueError, match="alg=RS256"):
+        slim.jwt_identity(pem, "agenttrustsec/lab/x", [{k: v for k, v in jwk.items() if k != "alg"}])
 
 
 def test_empty_trust_jwks_refused():

@@ -23,10 +23,13 @@
 ## 3. Decision pipeline (the Gate)
 
 ```
-ToolCall(agent_id, badge, tool, args, session)
+ToolCall(agent_id, badge, tool, args, session, peer)
   │
   ├─[1] Badge check    : signature valid, not expired, not revoked, subject == agent_id
-  │                      → yields verified role
+  │                      → yields verified role + the key the badge binds
+  ├─[1b] Peer check    : (SLIM deployments, mandatory) transport token sub == SLIM subject
+  │                      == routing name == badge holder's SLIM name, AND the token
+  │                      verifies with the badge-bound key (proof of possession)
   ├─[2] TBAC check     : verified role ∈ policy[tool].allowed_roles     (deterministic)
   ├─[3] Intent check   : if tool.change → session.intent must be "change"
   │                      semantic score(user_prompt, tool) ≥ threshold

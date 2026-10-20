@@ -32,3 +32,10 @@ def jwk_thumbprint(jwk: dict[str, Any]) -> str:
                            separators=(",", ":"), sort_keys=True)
     digest = hashlib.sha256(canonical.encode()).digest()
     return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
+def trust_jwk(public_key: Any) -> dict[str, str]:
+    """Public JWK for a SLIM trust JWKS. SLIM 3.4.5 silently skips JWKs without `alg`
+    (observed: such keys never verify), so always emit alg/use; kid = thumbprint."""
+    jwk = public_jwk(public_key)
+    return {**jwk, "alg": "RS256", "use": "sig", "kid": jwk_thumbprint(jwk)}

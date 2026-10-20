@@ -228,6 +228,7 @@ Output (2026-10-20):
 | reviewer-01 | `ZLXRltf2VV3Hj3Jj3KkvyHLSI9qQOxqKBqh4PDM6R1Q` | `bbc410d9-…` | `35419070-…` |
 | executor-01 | `20Xqm22VvT_Doop2rV3YNaaNRVSCOlRAT6xkJ5Cfblg` | `9a69bbc1-…` | `a8b27052-…` |
 | netops-mcp | `5q9tysl6LGnq_Z5s9UNy9IWFqa5V9-4xYCRsLPkTgIc` | (MCPServerBadge unchanged) | — |
+| intake-01 (2026-10-21, P3 PR5a) | `Gfx8mBk3LhV66yBZNi2zaNSoj3t44vgjxot-HpUUFRM` | `682ca691-…` (metadata `AGNTCY-7787aa23-dfa1-4600-b664-0c728b88fd27`) | — (new) |
 
 Node `.well-known` lists the newest VC first, but order isn't guaranteed — consumers
 must pick by content (unrevoked / VC id), never by position.

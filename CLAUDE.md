@@ -92,8 +92,9 @@ tests/                 # pytest — must stay green
       badges re-issued with key thumbprint. PR2 done: `transport/slim.py` (MCP over
       MLS SLIM, `[slim]` extra, live tests vs `lab/slim/`). PR3 done: gate `peer` check
       (`authz/peer.py`, badge-bound key proof of possession). PR4 done: gateway + agents on
-      SLIM (`serve.py --transport slim`, mutual peer checks, live attack matrix). Next: PR5
-      group session for the reviewer pool.
+      SLIM (`serve.py --transport slim`, mutual peer checks, live attack matrix). PR5 design approved
+      (§8 attested groups); PR5a done: `intake-01` identity (role intake, moderator). Next: PR5b
+      `transport/slim_group.py` + `policies/groups.yaml`.
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real

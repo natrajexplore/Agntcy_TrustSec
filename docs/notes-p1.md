@@ -4,10 +4,68 @@ Fill this in as you run the upstream projects. Claude Code: ask the owner to pas
 command output here rather than guessing results.
 
 ## SLIM (github.com/agntcy/slim)
-- [ ] Run a SLIM node locally (Docker image `ghcr.io/agntcy/slim`)
-- [ ] Run the Python bindings point-to-point example
+- [x] Run a SLIM node locally (`lab/slim/`, image `ghcr.io/agntcy/slim:3.4.5`)
+- [x] Run the Python bindings point-to-point example (plain + MLS + negative tests)
 - [ ] Run a group-session example; note how MLS group membership is added/removed
-- Observations (naming `<org>/<namespace>/<agent>`, ports, latency):
+- Observations (2026-10-20, node 3.4.5, `slim-bindings` 3.3.6):
+  - Python bindings moved to **github.com/agntcy/slim-bindings** (PyPI `slim-bindings`,
+    import `slim_bindings`; README still shows old `slim_uniffi_bindings` in places).
+    Wheel ships the examples as console scripts (`slim-bindings-p2p`, `-group`, ...).
+    Bindings 3.3.6 are built on core **3.4.5** -> node pinned to 3.4.5 (3.4.6 = today).
+    Also exists: **github.com/agntcy/slim-mcp-python** (MCP over SLIM) — read for P3.
+  - Names are `org/namespace/app` (`agntcy/ns/alice`) + a per-instance id. Node listens on
+    `:46357`; apps dial OUT to it (`connect_async`), subscribe to their own name, and
+    `set_route_async` to the remote — no app opens a port.
+  - **Identity is verified by the receiving app, not the node.** The node forwards; Alice
+    logs `dropping pre-session message: identity verification failed ... token invalid`
+    for a wrong secret and the sender just times out (`message send retries exhausted`,
+    ~25 s = 5 retries x 5 s). Like MACsec peers authenticating while the fabric forwards.
+  - **Shared-secret mode is a group PSK, not per-agent identity:** with the right secret,
+    an unregistered name (`agntcy/ns/mallory`) was accepted. Unusable for zero trust ->
+    P3 must use JWT mode (each app signs its own token with its private key; peers
+    verify against a JWKS = proof of possession) or SPIRE. This is where the bearer-badge
+    replay gap (ARCHITECTURE known gap) can close.
+  - MLS on a P2P session is one flag (`MlsSettings`); receiver needs no MLS flag.
+    3 round trips ~3.8–4.1 s wall, dominated by the example's 1 s sleeps — measure
+    latency properly in P6, not from these.
+
+### Runbook (Git Bash, repo root) — SLIM node + bindings examples
+
+Examples run isolated via `uvx` (nothing added to the project venv until P3). Use a
+throwaway secret per run; `SECRET` below is never written to the repo.
+
+**1. Node**
+```bash
+docker compose -f lab/slim/docker-compose.yml up -d
+docker compose -f lab/slim/docker-compose.yml logs slim | grep -E 'Version|server started'
+```
+Output: `Version: 3.4.5`, `dataplane server started endpoint=0.0.0.0:46357` (host: 127.0.0.1 only)
+
+**2. Point-to-point** (terminal 1 listens, terminal 2 sends)
+```bash
+SECRET=$(python -c "import secrets;print(secrets.token_hex(16))")
+P2P='uvx --python 3.12 --from slim-bindings[examples]==3.3.6 slim-bindings-p2p'
+$P2P --local agntcy/ns/alice --shared-secret "$SECRET"                       # terminal 1
+$P2P --local agntcy/ns/bob --remote agntcy/ns/alice --message "hey there" \
+     --iterations 3 --shared-secret "$SECRET" [--enable-mls]                   # terminal 2
+```
+Output (both plain and `--enable-mls`): `Sent message hey there - 1/3` ->
+`received (from session 456378187): hey there from 253ac012-…` x3.
+Negative: wrong secret (plain and MLS) -> sender `Error: ... failed to add participant to
+session: message send retries exhausted`; Alice logs `identity verification failed`.
+Right secret + made-up name `agntcy/ns/mallory` -> **accepted** (see observations).
+
+**3. Group with MLS** — interactive (prompt_toolkit), run yourself in 3 terminals:
+```bash
+G='uvx --python 3.12 --from slim-bindings[examples]==3.3.6 slim-bindings-group'
+$G --local agntcy/ns/client-1 --shared-secret "$SECRET"                      # terminal 1
+$G --local agntcy/ns/client-2 --shared-secret "$SECRET"                      # terminal 2
+$G --local agntcy/ns/moderator --remote agntcy/ns/chat --shared-secret "$SECRET" \
+   --invites agntcy/ns/client-1 --invites agntcy/ns/client-2 --enable-mls     # terminal 3
+```
+In the moderator: type messages; `remove agntcy/ns/client-2`, then `invite agntcy/ns/client-2`.
+Note: can a removed member still read new messages? Does a non-invited client see anything?
+Output:
 
 ## Identity (github.com/agntcy/identity)
 - [x] Node running (step 0)

@@ -1,0 +1,16 @@
+# SLIM data-plane node for the lab. Pinned to 3.4.5 = the core that
+# slim-bindings 3.3.6 (PyPI) is built against (slim-bindings rust/Cargo.toml @ v3.3.6).
+#
+#   docker compose -f lab/slim/docker-compose.yml up -d
+#
+# Agents connect to http://127.0.0.1:46357.
+name: agenttrustsec-slim
+services:
+  slim:
+    image: ghcr.io/agntcy/slim:3.4.5
+    restart: unless-stopped
+    command: ["/slim", "--config", "/config.yaml"]
+    volumes:
+      - ./server-config.yaml:/config.yaml:ro
+    ports:
+      - "127.0.0.1:46357:46357"

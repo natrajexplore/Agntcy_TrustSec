@@ -1,0 +1,24 @@
+# SLIM node for the lab — the "fabric" agents connect OUT to (no agent opens a port).
+# Upstream config/base/server-config.yaml (agntcy/slim). LAB ONLY: plaintext gRPC
+# (tls.insecure) and no transport auth; the compose file binds it to 127.0.0.1.
+# Message confidentiality between agents comes from MLS sessions, not this hop.
+tracing:
+  log_level: info
+  display_thread_names: true
+  display_thread_ids: true
+
+runtime:
+  n_cores: 0
+  thread_name: "slim-data-plane"
+  drain_timeout: 10s
+
+services:
+  slim/0:
+    node_id: slim-lab
+    default_gateway: auto
+    dataplane:
+      servers:
+        - endpoint: "0.0.0.0:46357"
+          tls:
+            insecure: true
+      clients: []

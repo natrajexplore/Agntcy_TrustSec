@@ -7,7 +7,7 @@ name = "agenttrustsec"
 version = "0.1.0"
 description = "Zero-trust for AI agents, modeled on Cisco TrustSec, built on the AGNTCY stack"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = { text = "MIT" }
 dependencies = [
     "mcp>=2.3,<3",
     "pyyaml>=6.0",

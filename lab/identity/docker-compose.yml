@@ -1,0 +1,40 @@
+# AGNTCY Identity Node for the lab — the "ISE PAN" our badge verifier talks to.
+# Pinned to 0.0.26 to match agntcy-identity-sdk 0.0.26 (identity/agntcy.py).
+# Ports bind to 127.0.0.1 only; Postgres has no host port.
+#
+#   echo "IDENTITY_DB_PASSWORD=<pick one>" > lab/identity/.env   # git-ignored
+#   docker compose -f lab/identity/docker-compose.yml up -d
+#
+# HTTP :4000 (CLI, .well-known), gRPC :4001 (Python SDK).
+name: agenttrustsec-identity
+services:
+  identity-postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD:?set IDENTITY_DB_PASSWORD in lab/identity/.env}
+      POSTGRES_DB: identity
+    volumes:
+      - identity-pg:/var/lib/postgresql
+
+  identity-node:
+    image: ghcr.io/agntcy/identity/node:0.0.26
+    restart: unless-stopped
+    depends_on:
+      - identity-postgres
+    ports:
+      - "127.0.0.1:4000:4000"
+      - "127.0.0.1:4001:4001"
+    environment:
+      SERVER_HTTP_HOST: ":4000"
+      SERVER_GRPC_HOST: ":4001"
+      API_URL: http://localhost:4000
+      DB_HOST: identity-postgres
+      DB_PORT: "5432"
+      DB_NAME: identity
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?set IDENTITY_DB_PASSWORD in lab/identity/.env}
+
+volumes:
+  identity-pg:

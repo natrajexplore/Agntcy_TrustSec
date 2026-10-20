@@ -141,3 +141,94 @@ Live attack matrix (2026-10-20, all as designed):
 | revoked agent (revoke-test-01) | `badge`: revoked |
 | genuine executor, `push_config` in a read session | `intent` (peer passes; layers still apply) |
 | impostor gateway: copied MCPServerBadge, real SLIM name, executor's key | agent: ServerAuthError, not signed by the badge's key |
+
+## 8. PR5 — attested group sessions for the reviewer pool (DRAFT for owner sign-off)
+
+Goal: a change proposal goes to a **pool of reviewers** over one MLS group; only verified
+reviewers can read it, and every admission is a gate decision. TrustSec analogy: a
+MACsec-protected VLAN whose membership is decided by ISE (802.1X per port), not by
+whoever plugs in with a valid-looking name.
+
+### 8.1 Verified facts — `lab/slim/group_probe.py` (2026-10-21, node 3.4.5, bindings 3.3.6, MLS on)
+
+| Q | Finding |
+|---|---|
+| Q1 | Moderator creates a GROUP session on a channel name, `set_route` + `invite_async` per member; broadcasts reach all members; each receiver sees the sender's `slim-peer-subject` and signed token |
+| Q2 | An **uninvited** app with a **trusted** key — even subscribed to the channel name — receives **nothing** |
+| Q3 | A non-moderator `invite`/`remove` is refused: `only initiator can modify participants` |
+| Q4 | A removed member's session closes; it gets **no later** broadcasts (MLS epoch moves on) |
+| Q5 | Inviting an app whose key is not in the trust JWKS fails (`failed to add participant`) |
+| Q6 | `participants_list_async` reflects joins/removals (names + ONLINE status only) |
+| **Q7** | **Impostor admission:** an app registering reviewer name `r4` with **another trusted key** (r3's) is **admitted** when the moderator invites `r4`, and **reads the next broadcast** (`msg5-secret-review`). Its later message carries `sub=r4` but a token **signed by r3's key** — detectable with the badge-bound key, but only **after** it already read |
+
+Q7 is the group form of the P2P name-spoof (§1), and worse: reading needs no tool call, so
+the gate never sees it. **Detection after admission is too late — admission must be gated.**
+
+### 8.2 Design — `src/agenttrustsec/transport/slim_group.py`
+
+**Moderator (`AttestedGroup`):**
+1. Create the GROUP session (MLS on). Invite each candidate by its SLIM name.
+2. **Admission gate:** nothing is broadcast while any member is unattested. Each new member
+   must first send an `attest` message `{agent_id, badge}`; the moderator runs the **same
+   checks as the gate** on it: `AgntcyBadgeVerifier` (signature, published + not revoked,
+   subject == agent_id) → `PeerBinding` on the message's transport peer (sub == SLIM name
+   == badge holder, token signed by the badge-bound key) → **group policy** (role allowed in
+   this channel, below).
+3. Fail or no attestation within the timeout → `remove_async` (MLS epoch rotates; the
+   failed member never saw a payload because nothing was sent yet).
+4. Every admission/removal = **one audit record** (rule 3), same shape as gate decisions.
+5. Later invites re-close the gate until the newcomer is attested.
+6. Replies: accept a member message only if its peer is an admitted member (pinned
+   identity per member; a change of token key/sub → remove).
+
+**Member (`GroupMember`):** on `listen_for_session`, wait for the moderator's first message
+(which carries the moderator's badge); verify it with `AgntcyBadgeVerifier` + `PeerBinding`
+and require the moderator role for this channel — **a reviewer never attests to, or reads
+proposals from, an unverified moderator** (impostor moderator = T9 for groups). Then send
+`attest`, then process verified broadcasts only.
+
+**Group policy — `policies/groups.yaml` (deny by default, wildcards rejected):**
+```yaml
+channels:
+  agenttrustsec/lab/reviewers:
+    moderator_roles: [intake]
+    member_roles: [reviewer]
+    attest_timeout_s: 10
+```
+
+### 8.3 Threats
+
+| Threat | After PR5 |
+|---|---|
+| Uninvited trusted agent eavesdrops | SLIM: never delivered (Q2) |
+| Impostor under a reviewer's name with another trusted key (Q7) | Admission gate: `peer` FAIL → removed before any broadcast |
+| Valid badge, wrong role (e.g. executor in the reviewer pool) | Group policy FAIL → removed |
+| Revoked reviewer | `badge` FAIL (published-status check) → removed |
+| Removed member keeps reading | MLS: no later messages (Q4) |
+| Member invites/removes others | SLIM: initiator only (Q3) |
+| Impostor moderator invites real reviewers | Members verify the moderator before attesting/reading |
+| **Remaining:** a legitimately admitted reviewer leaks content | Out of scope (insider); audit shows who was admitted when |
+
+### 8.4 Work order
+
+* **PR5a** — `intake-01` identity (key, OASF + badge with thumbprint, role in
+  `identities.yaml`, key in `trust-jwks.json`) if G1 = intake.
+* **PR5b** — `slim_group.py` + `policies/groups.yaml` + loader; unit tests with fake
+  sessions (attestation pass/fail/timeout, role policy, pinned member identity, moderator
+  verification); live tests: genuine pool admitted; **Q7 impostor removed before the first
+  broadcast**; executor (wrong role) removed; revoked removed; impostor moderator refused
+  by members.
+* Domain logic (what a review/vote is, quorum) stays in **P5**.
+
+### 8.5 Decisions for the owner
+
+* **G1 Moderator identity:** a new `intake-01` agent with role `intake` (**recommended**: CLAUDE.md
+  already names it; the orchestrator owns the session and its intent) vs reusing
+  `reviewer-01` as moderator (no new badge, but a reviewer would control the pool).
+* **G2 Admission gate:** hold all broadcasts until every member is attested (**recommended**;
+  Q7 shows post-hoc detection leaks one message) vs attest-after-join (simpler, leaks).
+* **G3 Group policy file** `policies/groups.yaml` as above (**recommended**) vs reusing
+  `tbac.yaml` with pseudo-tools (mixes tool authz with channel membership).
+* **G4 Attestation timeout** 10 s, failure = remove + audit (**recommended**).
+* **G5 Member-side moderator verification** required (**recommended**) vs trusting any
+  inviter (impostor moderator could feed fake proposals and harvest attestations).

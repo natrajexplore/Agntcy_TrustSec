@@ -3,8 +3,18 @@
   "name": "agenttrustsec/executor-01",
   "version": "v0.1.0",
   "description": "Applies approved changes to lab devices (push_config)",
-  "authors": ["AgentTrustSec lab"],
+  "authors": [
+    "AgentTrustSec lab"
+  ],
   "created_at": "2026-10-20T00:00:00Z",
-  "annotations": {"type": "agenttrustsec-lab"},
-  "skills": [{"category_name": "Network Operations", "class_name": "Configuration Deployment"}]
+  "annotations": {
+    "type": "agenttrustsec-lab",
+    "agenttrustsec.key_thumbprint": "20Xqm22VvT_Doop2rV3YNaaNRVSCOlRAT6xkJ5Cfblg"
+  },
+  "skills": [
+    {
+      "category_name": "Network Operations",
+      "class_name": "Configuration Deployment"
+    }
+  ]
 }

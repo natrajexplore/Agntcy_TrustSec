@@ -13,7 +13,9 @@ name = "agenttrustsec"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "mcp" },
+    { name = "pyjwt" },
     { name = "pyyaml" },
 ]
 
@@ -28,7 +30,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "agntcy-identity-sdk", marker = "extra == 'agntcy'", specifier = "==0.0.26" },
+    { name = "cryptography", specifier = ">=44" },
     { name = "mcp", specifier = ">=2.3,<3" },
+    { name = "pyjwt", specifier = ">=2.10" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]

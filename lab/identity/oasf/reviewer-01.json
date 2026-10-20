@@ -3,8 +3,18 @@
   "name": "agenttrustsec/reviewer-01",
   "version": "v0.1.0",
   "description": "Reviews proposed firewall/network changes for risk",
-  "authors": ["AgentTrustSec lab"],
+  "authors": [
+    "AgentTrustSec lab"
+  ],
   "created_at": "2026-10-20T00:00:00Z",
-  "annotations": {"type": "agenttrustsec-lab"},
-  "skills": [{"category_name": "Security", "class_name": "Change Risk Review"}]
+  "annotations": {
+    "type": "agenttrustsec-lab",
+    "agenttrustsec.key_thumbprint": "ZLXRltf2VV3Hj3Jj3KkvyHLSI9qQOxqKBqh4PDM6R1Q"
+  },
+  "skills": [
+    {
+      "category_name": "Security",
+      "class_name": "Change Risk Review"
+    }
+  ]
 }

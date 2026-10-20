@@ -49,6 +49,7 @@ src/agenttrustsec/
   models.py            # Decision, CheckResult, ToolCall, Session dataclasses
   identity/badge.py    # BadgeVerifier interface + LocalDevVerifier (dev HMAC)
   identity/agntcy.py   # AgntcyBadgeVerifier (agntcy-identity-sdk 0.0.26, Identity Node)
+  identity/keys.py     # RFC 7638 thumbprints of the agent keys badges bind (P3)
   authz/tbac.py        # Deterministic role→tool policy engine (deny by default)
   authz/intent.py      # Semantic intent checker (baseline now, embeddings/LLM later)
   authz/gate.py        # Combines badge + TBAC + intent → ALLOW/BLOCK, writes audit
@@ -85,7 +86,9 @@ tests/                 # pytest — must stay green
       `lab/identity/revoke_badge.py`; node Verify misses replayed pre-revocation copies,
       so the verifier also checks the node's published copy. Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
-- [ ] **P3 Transport** — move agents onto SLIM: point-to-point first, then a group
+- [ ] **P3 Transport** — 🟡 design approved (`docs/P3-design.md`). PR1 done: per-agent keys,
+      badges re-issued with key thumbprint. Next: PR2 `transport/slim.py`.
+      Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).

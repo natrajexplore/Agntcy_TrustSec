@@ -45,7 +45,7 @@ def fetch_server_badge(node_http: str, server_id: str) -> str:
     verifier = AgntcyBadgeVerifier(load_role_map(IDENTITIES, "mcp_servers"),
                                    badge_type=MCP_SERVER_BADGE)
     errors = []
-    for vc in reversed(vcs):                      # newest published last
+    for vc in vcs:                                # node order isn't guaranteed
         try:
             ident = verifier.verify(vc.get("value"), server_id)
         except BadgeError as e:

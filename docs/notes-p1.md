@@ -208,6 +208,30 @@ Output (2026-10-20): metadata `AGNTCY-ad860353-453a-4d71-9190-e1f32ca0947a`, VC
 - AFTER (published-copy status check): both copies -> `BadgeError: ... revoked`
   (`tests/test_agntcy_live.py`, fixture `tests/fixtures/revoke-test-01.original.jose`)
 
+**9. Key-bound agent badges (P3 PR1, docs/P3-design.md §2).** Each agent gets its own
+RSA key (`~/.agenttrustsec/keys/<name>.pem`, never in the repo); its RFC 7638
+thumbprint goes into the OASF `annotations` so the issuer signs the key binding.
+Re-issue under the SAME metadata id (`metadata load`), then revoke the old key-less VC.
+```bash
+python lab/identity/agent_keys.py reader-01 reviewer-01 executor-01 --write-oasf
+python lab/identity/agent_keys.py netops-mcp          # gateway key; thumbprint -> identities.yaml (D2, PR3)
+identity metadata load -m <MID>
+out=$(identity badge issue oasf -o lab/identity/oasf/<agent>.json) && echo "$out"
+identity badge publish -b "${out##*: }" -i http://localhost:4000
+python lab/identity/revoke_badge.py <MID> --vc-id <OLD_VC_ID> --yes
+```
+Output (2026-10-20):
+
+| agent | key thumbprint | new VC | old VC (revoked) |
+|---|---|---|---|
+| reader-01 | `jCYe9css2M5J8yN4MZBoUrcN4IiRJioRl1BUpc0mIj0` | `a47e4139-…` | `c8bbed52-…` |
+| reviewer-01 | `ZLXRltf2VV3Hj3Jj3KkvyHLSI9qQOxqKBqh4PDM6R1Q` | `bbc410d9-…` | `35419070-…` |
+| executor-01 | `20Xqm22VvT_Doop2rV3YNaaNRVSCOlRAT6xkJ5Cfblg` | `9a69bbc1-…` | `a8b27052-…` |
+| netops-mcp | `5q9tysl6LGnq_Z5s9UNy9IWFqa5V9-4xYCRsLPkTgIc` | (MCPServerBadge unchanged) | — |
+
+Node `.well-known` lists the newest VC first, but order isn't guaranteed — consumers
+must pick by content (unrevoked / VC id), never by position.
+
 ## CASA (github.com/outshift-open/outshift-casa)
 - [ ] `bash scripts/dev/local-setup-standalone.sh` on Minikube
 - [ ] Run safe vs compromised demo agent; screenshot Explorer UI traces

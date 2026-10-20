@@ -1,10 +1,12 @@
 """AgntcyBadgeVerifier against the REAL lab Identity Node (docs/notes-p1.md, Identity
 runbook). Skipped unless the SDK is installed and the node answers on :4000 / :4001.
 Uses the real badges published for the ids in policies/identities.yaml."""
+import base64
 import json
 import os
 import socket
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -16,11 +18,15 @@ from agenttrustsec.identity.agntcy import (  # noqa: E402
     MCP_SERVER_BADGE, AgntcyBadgeVerifier, load_role_map,
 )
 from agenttrustsec.identity.badge import BadgeError  # noqa: E402
+from agenttrustsec.identity.keys import (  # noqa: E402
+    THUMBPRINT_ANNOTATION, jwk_thumbprint, public_jwk,
+)
 from agenttrustsec.models import ToolCall, Verdict  # noqa: E402
 
 from conftest import ROOT  # noqa: E402
 
 NODE_HTTP = "http://localhost:4000"
+KEY_DIR = Path.home() / ".agenttrustsec" / "keys"
 PUSH = {"device": "edge-fw-01", "lines": ["permit ip any any"]}
 
 
@@ -45,10 +51,22 @@ def node_env():
     os.environ.setdefault("IDENTITY_NODE_USE_SSL", "0")
 
 
-def published_badge(ident):
+def published_vcs(ident):
     url = f"{NODE_HTTP}/v1alpha1/vc/{ident}/.well-known/vcs.json"
     with urllib.request.urlopen(url, timeout=5) as r:
-        return json.load(r)["vcs"][0]["value"]
+        return [v["value"] for v in json.load(r)["vcs"]]
+
+
+def payload(jose):
+    part = jose.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+
+
+def published_badge(ident):
+    """The subject's current badge: the one published copy that is not revoked."""
+    live = [j for j in published_vcs(ident) if not payload(j).get("credentialStatus")]
+    assert len(live) == 1, f"{ident}: expected one unrevoked badge, found {len(live)}"
+    return live[0]
 
 
 @pytest.fixture(scope="module")
@@ -90,6 +108,29 @@ def test_gate_with_real_badges(live, policy, audit, read_session, change_session
     assert d.verdict is Verdict.BLOCK      # change tool in a read session
 
 
+# --- P3 PR1: every current agent badge binds the agent's signing key -----------------
+
+@pytest.mark.parametrize("ident", sorted(ROLES))
+def test_current_badge_binds_a_key_thumbprint(ident):
+    oasf = json.loads(payload(published_badge(ident))["credentialSubject"]["badge"])
+    thumb = oasf.get("annotations", {}).get(THUMBPRINT_ANNOTATION)
+    assert thumb and len(thumb) == 43        # b64url SHA-256, issuer-signed
+    key_file = KEY_DIR / f"{oasf['name'].split('/')[-1]}.pem"
+    if key_file.exists():                    # only on the machine holding the keys
+        from cryptography.hazmat.primitives import serialization
+        key = serialization.load_pem_private_key(key_file.read_bytes(), password=None)
+        assert jwk_thumbprint(public_jwk(key.public_key())) == thumb
+
+
+@pytest.mark.parametrize("ident", sorted(ROLES))
+def test_old_keyless_badges_are_revoked(live, ident):
+    for jose in published_vcs(ident):
+        oasf = json.loads(payload(jose)["credentialSubject"]["badge"])
+        if THUMBPRINT_ANNOTATION not in oasf.get("annotations", {}):
+            with pytest.raises(BadgeError, match="revoked"):
+                live.verify(jose, ident)
+
+
 # --- Revocation (docs/notes-p1.md step 8): throwaway badge, revoked on the node -------
 
 REVOKED_ID = "AGNTCY-ad860353-453a-4d71-9190-e1f32ca0947a"   # revoke-test-01; no role
@@ -99,7 +140,7 @@ ORIGINAL = (ROOT / "tests" / "fixtures" / "revoke-test-01.original.jose").read_t
 @pytest.fixture(scope="module")
 def revoked_published():
     try:
-        return published_badge(REVOKED_ID)
+        return published_vcs(REVOKED_ID)[0]
     except Exception:  # noqa: BLE001 - a different lab node never issued it
         pytest.skip("revoke-test-01 not on this node")
 

@@ -1,5 +1,6 @@
-"""P4d LlmMatcher with a fake judge — no API calls, no cost. Fail-closed rules must never
-be loosened: anything but a clean allow verdict is a deny; SDK errors propagate (gate ERROR)."""
+"""P4d LlmMatcher (local Ollama only) with a fake judge / faked HTTP — no model needed.
+Fail-closed rules must never be loosened: anything but a clean verdict is a deny; transport
+errors propagate (gate ERROR -> BLOCK); a changed local model refuses to start."""
 import json
 from types import SimpleNamespace as NS
 
@@ -7,7 +8,7 @@ import pytest
 
 from agenttrustsec.authz import semantic
 from agenttrustsec.authz.semantic import (
-    LLM_MODEL, VERDICT_SCHEMA, JudgeReply, LlmMatcher, ToolRef, anthropic_judge,
+    OLLAMA_DIGEST, OLLAMA_MODEL, VERDICT_SCHEMA, JudgeReply, LlmMatcher, ToolRef, ollama_judge,
 )
 
 ACL = ToolRef("show_acl", "List access-control entries on a device", "netops-mcp")
@@ -27,7 +28,7 @@ class FakeJudge:
 
 
 def verdict(v, reason="ok"):
-    return JudgeReply("end_turn", json.dumps({"verdict": v, "reason": reason}), 120, 30)
+    return JudgeReply("stop", json.dumps({"verdict": v, "reason": reason}), 120, 30)
 
 
 def test_allow_and_deny():
@@ -37,21 +38,21 @@ def test_allow_and_deny():
 
 
 @pytest.mark.parametrize("reply,why", [
-    (JudgeReply("refusal", ""), "stop_reason='refusal'"),
-    (JudgeReply("max_tokens", '{"verdict": "al'), "stop_reason='max_tokens'"),
-    (JudgeReply("end_turn", "not json"), "unparseable"),
-    (JudgeReply("end_turn", "[]"), "unparseable"),
-    (JudgeReply("end_turn", '{"reason": "no verdict"}'), "unparseable"),
-    (JudgeReply("end_turn", '{"verdict": "maybe", "reason": ""}'), "unknown verdict"),
+    (JudgeReply("length", '{"verdict": "al'), "stop_reason='length'"),
+    (JudgeReply("", ""), "stop_reason=''"),
+    (JudgeReply("stop", "not json"), "unparseable"),
+    (JudgeReply("stop", "[]"), "unparseable"),
+    (JudgeReply("stop", '{"reason": "no verdict"}'), "unparseable"),
+    (JudgeReply("stop", '{"verdict": "maybe", "reason": ""}'), "unknown verdict"),
 ])
 def test_anything_but_a_clean_verdict_denies(reply, why):
     r = LlmMatcher(FakeJudge(reply)).match(TASK, ACL)
     assert r.allow is False and why in r.reason
 
 
-def test_sdk_errors_propagate_for_gate_error_block():
+def test_transport_errors_propagate_for_gate_error_block():
     with pytest.raises(TimeoutError):
-        LlmMatcher(FakeJudge(TimeoutError("api timeout"))).match(TASK, ACL)
+        LlmMatcher(FakeJudge(TimeoutError("ollama timeout"))).match(TASK, ACL)
 
 
 def test_definitive_verdicts_cached_failures_not():
@@ -59,10 +60,10 @@ def test_definitive_verdicts_cached_failures_not():
     m = LlmMatcher(ok)
     m.match(TASK, ACL), m.match(TASK, ACL)
     assert len(ok.calls) == 1 and m.usage == {"calls": 1, "input_tokens": 120, "output_tokens": 30}
-    bad = FakeJudge(JudgeReply("refusal", ""))
+    bad = FakeJudge(JudgeReply("length", ""))
     m2 = LlmMatcher(bad)
     m2.match(TASK, ACL), m2.match(TASK, ACL)
-    assert len(bad.calls) == 2                       # a refusal is retried next time, never cached
+    assert len(bad.calls) == 2                       # a non-answer is retried next time, never cached
 
 
 def test_prompt_carries_only_task_and_our_tool_text():
@@ -80,28 +81,40 @@ def test_catalog_only_when_enabled():
     assert [t["name"] for t in json.loads(j.calls[0][1])["other_tools_on_this_server"]] == ["show_acl"]
 
 
-def test_anthropic_adapter_request_shape(monkeypatch):
-    """The real adapter, with the SDK client faked: model, effort, strict schema, no sampling."""
-    pytest.importorskip("anthropic")                  # `llm` extra; CI runs without it
-    sent = {}
+def fake_ollama(monkeypatch, digest=OLLAMA_DIGEST, reply=None):
+    sent = []
 
-    class FakeClient:
-        def __init__(self, **kw):
-            sent["client"] = kw
-            self.messages = NS(create=self.create)
+    def post(url, body, timeout):
+        sent.append((url, body, timeout))
+        if url.endswith("/api/tags"):
+            return {"models": [{"name": OLLAMA_MODEL, "digest": digest}]}
+        return reply or {"done_reason": "stop", "prompt_eval_count": 184, "eval_count": 31,
+                         "message": {"content": '{"verdict":"allow","reason":"x"}'}}
+    monkeypatch.setattr(semantic, "_post", post)
+    return sent
 
-        def create(self, **kw):
-            sent["request"] = kw
-            return NS(stop_reason="end_turn", content=[NS(type="text", text='{"verdict":"allow","reason":"x"}')],
-                      usage=NS(input_tokens=200, output_tokens=40))
 
-    import anthropic
-    monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
-    reply = anthropic_judge(timeout=12.0)("SYS", "USER")
-    req = sent["request"]
-    assert sent["client"] == {"timeout": 12.0, "max_retries": 1}
-    assert req["model"] == LLM_MODEL == "claude-opus-5-5"
-    assert req["output_config"] == {"effort": "low", "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}}
-    assert not {"temperature", "top_p", "top_k", "thinking"} & set(req)
-    assert reply == JudgeReply("end_turn", '{"verdict":"allow","reason":"x"}', 200, 40)
-    assert semantic.VERDICT_SCHEMA["additionalProperties"] is False
+def test_ollama_adapter_request_shape(monkeypatch):
+    """Local only, pinned model, schema-constrained, deterministic."""
+    sent = fake_ollama(monkeypatch)
+    reply = ollama_judge(timeout=90.0)("SYS", "USER")
+    (tags_url, _, _), (chat_url, body, timeout) = sent
+    assert tags_url == chat_url.replace("/api/chat", "/api/tags") == "http://127.0.0.1:11434/api/tags"
+    assert body["model"] == OLLAMA_MODEL == "qwen2.5:7b-instruct" and body["stream"] is False
+    assert body["format"] == VERDICT_SCHEMA and VERDICT_SCHEMA["additionalProperties"] is False
+    assert body["options"] == {"temperature": 0, "seed": 7}
+    assert body["messages"] == [{"role": "system", "content": "SYS"}, {"role": "user", "content": "USER"}]
+    assert timeout == 90.0
+    assert reply == JudgeReply("stop", '{"verdict":"allow","reason":"x"}', 184, 31)
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, None])
+def test_ollama_refuses_a_changed_or_missing_model(monkeypatch, digest):
+    fake_ollama(monkeypatch, digest=digest)
+    with pytest.raises(RuntimeError, match="pinned"):
+        ollama_judge()
+
+
+def test_ollama_truncated_answer_is_a_deny(monkeypatch):
+    fake_ollama(monkeypatch, reply={"done_reason": "length", "message": {"content": '{"verdict":"all'}})
+    assert LlmMatcher(ollama_judge()).match(TASK, ACL).allow is False

@@ -146,9 +146,13 @@ class EmbeddingMatcher:
                                      f"rank={s['rank']} vs threshold {self.threshold}")
 
 
-# --- P4d: LLM intent verifier (Claude) --------------------------------------------------
+# --- P4d: LLM intent verifier (local Ollama only — owner decision 2026-10-23) ------------
 
-LLM_MODEL = "claude-opus-5-5"          # D1: Opus 5.5 only, effort low
+# D1 (revised): a local model only; nothing in this project calls a paid API.
+OLLAMA_URL = "http://127.0.0.1:11434"
+OLLAMA_MODEL = "qwen2.5:7b-instruct"
+# Pinned: the adapter refuses to run if the local model under that name has changed.
+OLLAMA_DIGEST = "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e"
 
 LLM_SYSTEM = """You are the intent check of an authorization gate for network-operations agents.
 An agent wants to call one tool. Decide whether that tool is appropriate for accomplishing the
@@ -174,6 +178,8 @@ VERDICT_SCHEMA = {
     "additionalProperties": False,
 }
 
+COMPLETE = "stop"     # the only finish reason that counts as a real answer
+
 
 @dataclass(frozen=True)
 class JudgeReply:
@@ -183,28 +189,37 @@ class JudgeReply:
     output_tokens: int = 0
 
 
-# (system, user) -> JudgeReply. The vendor SDK stays behind this callable (CLAUDE.md rule 7).
+# (system, user) -> JudgeReply. The model server stays behind this callable (CLAUDE.md rule 7).
 Judge = Callable[[str, str], JudgeReply]
 
 
-def anthropic_judge(model: str = LLM_MODEL, timeout: float = 30.0, max_retries: int = 1,
-                    max_tokens: int = 4096) -> Judge:
-    """Claude via the official SDK (`llm` extra, anthropic==1.17.0). Credentials come from the
-    environment (ANTHROPIC_API_KEY / `ant auth login`), never from the repo. SDK errors
-    (timeout, outage, rate limit) propagate -> the gate records ERROR -> BLOCK (D3)."""
-    import anthropic
+def _post(url: str, body: dict | None, timeout: float) -> dict:
+    import urllib.request
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data, {"Content-Type": "application/json"},
+                                 method="POST" if body is not None else "GET")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
 
-    client = anthropic.Anthropic(timeout=timeout, max_retries=max_retries)
+
+def ollama_judge(model: str = OLLAMA_MODEL, digest: str = OLLAMA_DIGEST, url: str = OLLAMA_URL,
+                 timeout: float = 120.0, seed: int = 7, keep_alive: str = "30m") -> Judge:
+    """Local Ollama chat with a JSON-schema `format` (structured output), temperature 0 and a
+    fixed seed (reproducible). Checks the pinned model digest first. Network errors and
+    timeouts propagate -> the gate records ERROR -> BLOCK (D3). stdlib only, no new dependency."""
+    tags = _post(f"{url}/api/tags", None, timeout=10)
+    found = {m.get("name"): m.get("digest") for m in tags.get("models", [])}
+    if found.get(model) != digest:
+        raise RuntimeError(f"ollama model {model!r} digest {found.get(model)!r} != pinned {digest!r}")
 
     def judge(system: str, user: str) -> JudgeReply:
-        r = client.messages.create(
-            model=model, max_tokens=max_tokens, system=system,
-            messages=[{"role": "user", "content": user}],
-            output_config={"effort": "low",
-                           "format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
-        )
-        text = next((b.text for b in r.content if b.type == "text"), "")
-        return JudgeReply(r.stop_reason or "", text, r.usage.input_tokens, r.usage.output_tokens)
+        out = _post(f"{url}/api/chat", {
+            "model": model, "stream": False, "keep_alive": keep_alive, "format": VERDICT_SCHEMA,
+            "options": {"temperature": 0, "seed": seed},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        }, timeout)
+        return JudgeReply(out.get("done_reason") or "", (out.get("message") or {}).get("content", ""),
+                          out.get("prompt_eval_count") or 0, out.get("eval_count") or 0)
     return judge
 
 
@@ -212,8 +227,8 @@ class LlmMatcher:
     """LLM-ResM-style verifier (P4d). Sees ONLY the sealed user task and OUR tool name +
     description (from tbac.yaml / the benchmark) — never tool arguments, results, or a
     server's self-advertised descriptions. Any doubt -> deny:
-      stop_reason other than end_turn (refusal, max_tokens, ...), unparseable JSON, or a
-      verdict other than allow/deny. Definitive verdicts are cached per (task, tool)."""
+      a finish reason other than "stop" (e.g. "length"), unparseable JSON, or a verdict
+      other than allow/deny. Definitive verdicts are cached per (task, tool)."""
 
     def __init__(self, judge: Judge, *, with_catalog: bool = False, system: str = LLM_SYSTEM):
         self.judge, self.with_catalog, self.system = judge, with_catalog, system
@@ -236,7 +251,7 @@ class LlmMatcher:
         self.usage["calls"] += 1
         self.usage["input_tokens"] += reply.input_tokens
         self.usage["output_tokens"] += reply.output_tokens
-        if reply.stop_reason != "end_turn":
+        if reply.stop_reason != COMPLETE:
             return MatchResult(False, 0.0, f"llm: no verdict (stop_reason={reply.stop_reason!r})")
         try:
             body = json.loads(reply.text)

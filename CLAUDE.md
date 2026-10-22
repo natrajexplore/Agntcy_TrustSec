@@ -100,14 +100,13 @@ tests/                 # pytest — must stay green
       attested groups (`transport/slim_group.py`, `authz/groups.py`, `policies/groups.yaml`).
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
-- [ ] **P4 Authorization** — design `docs/P4-design.md` (D1 Opus 5.5, D2 Claude only, D3 BLOCK; D6
-      spend decided per run). P4a done: eval harness (`eval/harness.py`, `astra_eval.py`,
+- [ ] **P4 Authorization** — design `docs/P4-design.md` (D1 local Ollama qwen2.5:7b, D2 LLM only, D3 BLOCK). P4a done: eval harness (`eval/harness.py`, `astra_eval.py`,
       `netops_eval.py` + 48 cases), baseline in `eval/results/p4a-baseline.md`. P4b done: scope check
       (`scoped_args` in tbac.yaml, T6; D5 = BLOCK). P4c done: `EmbeddingMatcher` (fastembed,
       `semantic` extra) + `eval/results/p4c-embedding.md` — prefilter does not pay off on netops,
-      so D2 revised to **Claude only**. P4d step 1 done: `LlmMatcher` (`llm` extra,
-      anthropic==1.17.0, fail closed, paid eval runs need `--yes-spend`). Next: P4d step 2 = 20-case
-      paid pilot once the owner sets ANTHROPIC_API_KEY and OKs it.
+      so D2 revised to an LLM-only check. **No paid APIs in this project — local Ollama only**
+      (owner, 2026-10-23): `LlmMatcher` + `ollama_judge` (qwen2.5:7b-instruct pinned by digest,
+      temperature 0 + seed, fail closed). P4d: local eval runs in progress.
       TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.

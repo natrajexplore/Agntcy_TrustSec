@@ -3,7 +3,7 @@
     git clone https://github.com/outshift-open/ASTRA eval/.astra
     git -C eval/.astra checkout ee05b9b6e6c1c91688db45b187da68f6b2ecb8e7      # pinned
     python eval/astra_eval.py --matcher lexical --split test --tools 01_tool 03_tools
-    python eval/astra_eval.py --matcher llm --limit 20 --yes-spend      # PAID (Claude API)
+    python eval/astra_eval.py --matcher llm --limit 20     # local Ollama (free, ~6.5 s/check)
 
 Schema verified on that commit (2026-10-23): a record is
   {"input": {"task", "tools": [...], "mcp_servers": [...]},
@@ -25,7 +25,7 @@ sys.path.insert(0, str(HERE))
 
 from harness import TABLE_HEADER, Case, markdown_row, metrics, run  # noqa: E402
 
-from agenttrustsec.authz.semantic import LexicalMatcher, LlmMatcher, ToolRef, anthropic_judge  # noqa: E402
+from agenttrustsec.authz.semantic import LexicalMatcher, LlmMatcher, ToolRef, ollama_judge  # noqa: E402
 
 DEFAULT_ROOT = HERE / ".astra"
 PINNED = "ee05b9b6e6c1c91688db45b187da68f6b2ecb8e7"
@@ -59,10 +59,8 @@ def load_cases(root: Path, tools: str, split: str) -> list[Case]:
 
 
 MATCHERS = {"lexical": lambda: LexicalMatcher(),
-            "llm": lambda: LlmMatcher(anthropic_judge()),
-            "llm-catalog": lambda: LlmMatcher(anthropic_judge(), with_catalog=True)}
-PAID = {"llm", "llm-catalog"}
-PRICE_PER_MTOK = {"input": 4.00, "output": 20.00}   # claude-opus-5-5 (skill table, cached 2026-10-06)
+            "llm": lambda: LlmMatcher(ollama_judge()),
+            "llm-catalog": lambda: LlmMatcher(ollama_judge(), with_catalog=True)}
 
 
 def stratified(cases: list[Case], limit: int) -> list[Case]:
@@ -78,13 +76,12 @@ def stratified(cases: list[Case], limit: int) -> list[Case]:
     return out
 
 
-def report_spend(matcher) -> None:
+def report_usage(matcher) -> None:
     u = getattr(matcher, "usage", None)
     if not u or not u["calls"]:
         return
-    cost = (u["input_tokens"] * PRICE_PER_MTOK["input"] + u["output_tokens"] * PRICE_PER_MTOK["output"]) / 1e6
-    print(f"\nAPI usage: {u['calls']} calls, {u['input_tokens']} in / {u['output_tokens']} out tokens "
-          f"-> ${cost:.4f} (${cost / u['calls']:.5f}/call, list price)")
+    print(f"\nLocal model usage: {u['calls']} calls, {u['input_tokens']} in / {u['output_tokens']} out "
+          f"tokens (no API, no cost)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -94,10 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--split", default="validation", choices=["validation", "test"])
     ap.add_argument("--matcher", default="lexical", choices=sorted(MATCHERS))
     ap.add_argument("--limit", type=int, default=0, help="stratified sample size per --tools set")
-    ap.add_argument("--yes-spend", action="store_true", help="required for paid (Claude API) matchers")
     args = ap.parse_args(argv)
-    if args.matcher in PAID and not args.yes_spend:
-        ap.error(f"{args.matcher} calls the Claude API (costs money): pass --yes-spend after the owner OKs it")
     matcher = MATCHERS[args.matcher]()
 
     def decide(case, tool):
@@ -110,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         cases = stratified(load_cases(args.astra, tools, args.split), args.limit)
         m = metrics(run(decide, cases))
         print(markdown_row(f"{args.matcher} · {tools}" + (f" (n={len(cases)})" if args.limit else ""), m))
-    report_spend(matcher)
+    report_usage(matcher)
     return 0
 
 

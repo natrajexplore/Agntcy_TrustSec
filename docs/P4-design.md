@@ -155,20 +155,25 @@ per call on CPU.
 the gate; `EmbeddingMatcher` and these results stay in the repo as evidence (and as a possible
 future option once a held-out netops set exists).
 
-## 4e. P4d step 1 — LlmMatcher built, not yet evaluated (2026-10-23)
+## 4e. P4d — local LLM verifier (Ollama only, owner decision 2026-10-23)
 
-`authz/semantic.py`: `LlmMatcher` + `anthropic_judge` adapter (`llm` extra,
-**`anthropic==1.17.0`** — latest 1.x; 2.0.0 shipped 2026-10-21 and is not verified here).
-Request: `claude-opus-5-5`, `output_config = {effort: low, format: strict JSON schema
-{verdict: allow|deny, reason}}`, no sampling params (rejected by the API since 2026-10-21),
-timeout 30 s, 1 SDK retry. Prompt = the sealed task + our tool name/description, as JSON data;
-optional `with_catalog` adds the server's other tools (to compare in step 2). Fail closed:
-non-`end_turn` stop (refusal, max_tokens), bad JSON, unknown verdict → deny; SDK errors
-propagate → gate ERROR → BLOCK (D3). Definitive verdicts cached per (task, tool).
-Server-side refusal **fallbacks are deliberately not enabled**: they would re-run a declined
-check on another model, against D1 (Opus 5.5 only); a refusal is simply a deny.
-Paid runs are opt-in: `astra_eval.py --matcher llm --limit N --yes-spend`,
-`netops_eval.py --llm --yes-spend`; both print measured tokens and list-price cost.
+**D1 revised: no paid API in this project.** The Claude adapter, the `anthropic` dependency and
+`ANTHROPIC_API_KEY` were removed before any call was made ($0 spent). `LlmMatcher` is
+provider-neutral; its judge is now `ollama_judge` (stdlib HTTP to `127.0.0.1:11434`, no new
+dependency):
+* model **`qwen2.5:7b-instruct`, pinned by digest** `845dbda0…697e` — the adapter refuses to
+  start if the local model under that name changed or is missing;
+* Ollama structured output: `format` = the strict verdict schema `{verdict: allow|deny, reason}`;
+  `temperature 0` + fixed `seed` → reproducible (the hosted API no longer allows this);
+* fail closed: finish reason other than `stop` (e.g. `length`), bad JSON, unknown verdict →
+  deny; connection errors / timeouts (120 s) propagate → gate ERROR → BLOCK (D3);
+* prompt = sealed task + our tool name/description as JSON data (optional `with_catalog`).
+
+Probe on this laptop (Core Ultra 5 125H, 15.5 GB, Intel Arc iGPU): qwen2.5:7b ~6.5 s per
+verdict warm (19 s cold load); `nemotron-3-nano:4b` 24–27 s and verbose → not used. Both
+followed the schema and judged the 3 probe cases correctly. **The provisional D4 latency bar
+(p95 ≤ 1.5 s) is not reachable locally** — the per-session verdict cache makes it a one-time
+cost per tool per session; owner decides at P4e.
 
 ## 5. Work order (one PR each)
 
@@ -176,16 +181,16 @@ Paid runs are opt-in: `astra_eval.py --matcher llm --limit N --yes-spend`,
   numbers for today's keyword checker** (free, no API).
 * **P4b** ✅ scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
 * **P4c** ✅ `EmbeddingMatcher` (local model, pinned) + eval numbers — D2 → Claude only.
-* **P4d** step 1 ✅ `LlmMatcher` built + unit-tested (no spend); step 2 = paid eval — **paid runs only after you approve the budget**.
+* **P4d** ✅ `LlmMatcher` on local Ollama (pinned qwen2.5:7b) + local eval runs — **paid runs only after you approve the budget**.
 * **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
   for offline dev; README/ARCHITECTURE update.
 
 ## 6. Decisions
 
-**Owner decisions (2026-10-23):** D1 = **`claude-opus-5-5` only** (effort `low`); D2 = cascade, **revised after P4c to Claude
+**Owner decisions (2026-10-23):** D1 = `claude-opus-5-5`, **revised the same day to local Ollama only
+(`qwen2.5:7b-instruct`, no paid API — §4e)**; D2 = cascade, **revised after P4c to Claude
 only** (§4d); D3 = **BLOCK** when Claude is unreachable;
-D6 = **decide later** — P4a–P4c are free; ask again, with a measured estimate, before any
-paid run. D5 = **BLOCK** (confirmed 2026-10-23). D4 still provisional — raised again at P4e.
+D6 = moot (no paid runs; local evals cost time, not money). D5 = **BLOCK** (confirmed 2026-10-23). D4 still provisional — raised again at P4e.
 
 Options as proposed:
 

@@ -1,4 +1,4 @@
-# P4 design — semantic intent check, evaluated before trusted (DRAFT for owner sign-off)
+# P4 design — semantic intent check, evaluated before trusted
 
 Goal (CLAUDE.md P4): replace the keyword relevance test in `authz/intent.py` with a real
 semantic check, and **measure it on ASTRA (plus our own netops cases) before the gate
@@ -111,7 +111,15 @@ validation+test pass), Haiku 5.5 ≈ 40× less (<$1). Embedding matcher: free (l
 * **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
   for offline dev; README/ARCHITECTURE update.
 
-## 6. Decisions for the owner
+## 6. Decisions
+
+**Owner decisions (2026-10-23):** D1 = **`claude-opus-5-5` only** (effort `low`); D2 = **cascade**
+(embedding deny-only prefilter → Claude); D3 = **BLOCK** when Claude is unreachable;
+D6 = **decide later** — P4a–P4c are free; ask again, with a measured estimate, before any
+paid run. D4 and D5 not yet answered: the recommended values below are **provisional**
+and will be raised again when they bite (D5 in P4b, D4 at P4e).
+
+Options as proposed:
 
 * **D1 Model:** evaluate **both** `claude-opus-5-5` (effort `low`; the default) and
   `claude-haiku-5-5` (effort `low`; ~40× cheaper, likely faster) on validation, then pick the

@@ -4,7 +4,12 @@
 # with `act` (nektos/act). GitHub runs a workflow only once a file under
 # .github/workflows/ is pushed to GitHub — until then nothing happens there.
 #
-#   act -j test -P ubuntu-latest=catthehacker/ubuntu:act-latest
+#   docker network create act-isolated        # once
+#   act -j test -P ubuntu-latest=catthehacker/ubuntu:act-latest --network act-isolated
+#
+# --network act-isolated matters: by default act's containers can reach services on this
+# PC's localhost, so live tests would hit the running lab (177 passed / 15 skipped) —
+# unlike GitHub's runner. Isolated, it matches GitHub: 153 passed / 39 skipped (2026-10-22).
 #
 # Live tests (lab Identity Node, SLIM node, agent keys) skip themselves here: CI has no
 # lab and must never hold real keys or secrets (CLAUDE.md rule 5).

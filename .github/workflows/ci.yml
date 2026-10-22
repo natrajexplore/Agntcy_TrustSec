@@ -1,0 +1,42 @@
+# AgentTrustSec CI — unit tests on every push to main and every pull request.
+#
+# LOCAL ONLY for now: this file lives on the never-pushed `ci-local` branch and is run
+# with `act` (nektos/act). GitHub runs a workflow only once a file under
+# .github/workflows/ is pushed to GitHub — until then nothing happens there.
+#
+#   act -j test -P ubuntu-latest=catthehacker/ubuntu:act-latest
+#
+# Live tests (lab Identity Node, SLIM node, agent keys) skip themselves here: CI has no
+# lab and must never hold real keys or secrets (CLAUDE.md rule 5).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read            # least privilege: the job only reads the code
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install project with all extras (imports must resolve; lab stays absent)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,agntcy,slim]"
+
+      - name: Unit tests (live tests skip without the lab)
+        run: python -m pytest -q -rs

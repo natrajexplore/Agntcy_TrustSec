@@ -101,9 +101,28 @@ Cost (estimates, confirmed by a 20-case pilot before any full run): ~2–4k inpu
 ≤0.5k output tokens per ASTRA case → Opus 5.5 ≈ $0.01–0.03/case (~$20–60 per full
 validation+test pass), Haiku 5.5 ≈ 40× less (<$1). Embedding matcher: free (local).
 
+## 4b. Baseline (P4a, 2026-10-23) — `eval/results/p4a-baseline.md`
+
+ASTRA pinned at `ee05b9b`, cloned into `eval/.astra/` (git-ignored). ASTRA tools have no
+keyword lists, so today's check is approximated by a lexical matcher (task words ∩ tool
+name + description).
+
+| Today's check | false-allow wrong | false-allow null | false-block correct |
+|---|---|---|---|
+| ASTRA test, 1 tool (lexical) | **34.8%** | **30.9%** | 21.5% |
+| ASTRA test, 3 tools (lexical) | 14.5% | 3.2% | **58.2%** |
+| netops, real `BaselineIntentChecker` | 31.8% (all of it scope + args-content) | 0.0% | 0.0% |
+
+* On an unbiased benchmark, today's relevance test lets **about a third of mismatched tool
+  calls through** and still blocks a fifth of good ones.
+* On our netops set the keyword check looks good on near-miss / off-domain (0/14, 0/8
+  allowed) — but its `tbac.yaml` keywords and these tasks were written by the same author,
+  so that is flattering. Its real gaps there: **6/7 scope cases allowed** (right tool,
+  device/IP never named — T6) and the args-content case. P4b targets scope.
+
 ## 5. Work order (one PR each)
 
-* **P4a** eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
+* **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
   numbers for today's keyword checker** (free, no API).
 * **P4b** scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
 * **P4c** `EmbeddingMatcher` (local model, pinned) + eval numbers.

@@ -100,7 +100,10 @@ tests/                 # pytest — must stay green
       attested groups (`transport/slim_group.py`, `authz/groups.py`, `policies/groups.yaml`).
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
-- [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real
+- [ ] **P4 Authorization** — design `docs/P4-design.md` (D1 Opus 5.5, D2 cascade, D3 BLOCK; D6
+      spend decided per run). P4a done: eval harness (`eval/harness.py`, `astra_eval.py`,
+      `netops_eval.py` + 48 cases), baseline in `eval/results/p4a-baseline.md`. Next: P4b scope check.
+      TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.
 - [ ] **P5 Domain** — real agents: intake, reader (pyATS / mock), reviewer (port the

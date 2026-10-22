@@ -5,3 +5,5 @@ __pycache__/
 # decision logs at the repo root only — NOT the src/agenttrustsec/audit/ module
 /audit/
 .pytest_cache/
+# ASTRA dataset clone (pinned commit, see eval/README.md) — not ours to commit
+/eval/.astra/

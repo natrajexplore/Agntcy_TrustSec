@@ -71,11 +71,13 @@ Role is taken **only from the verified badge**, never from the caller's claim.
 | T4 | Reader agent tries `push_config` | [2] TBAC → BLOCK |
 | T5 | Legit executor pushes config during a read-only audit (prompt injection) | [3] intent → BLOCK |
 | T6 | Allowed tool but irrelevant to request (data exfil via `show_running_config` on unrelated device) | [3] semantic → BLOCK (P4) |
-| T7 | Eavesdrop / tamper on agent traffic | SLIM MLS (P3) |
-| T8 | Agent exposed via inbound port gets scanned/attacked | SLIM outbound-only (P3) |
+| T7 | Eavesdrop / tamper on agent traffic | SLIM MLS (P3, done) |
+| T8 | Agent exposed via inbound port gets scanned/attacked | SLIM outbound-only (P3, done) |
 | T9 | Fake / impostor MCP server feeds poisoned results | client verifies server badge (`mcpgate/client.py`) |
 | T10 | Leaked or replayed external-data token | broker: TTL + single-use + aud/tool scope |
 | T11 | Agent self-upgrades session intent `read` → `change` over the wire | intake-sealed session token |
+| T12 | Trusted agent joins a group under another member's name and reads it | group admission (badge → peer → group policy) before any broadcast (`transport/slim_group.py`) |
+| T13 | Impostor moderator harvests attestations / feeds fake proposals | members verify the moderator (role `intake`) before attesting |
 
 ## 5. Phase mapping to AGNTCY / Outshift components
 

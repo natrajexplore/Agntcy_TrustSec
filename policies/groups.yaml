@@ -1,0 +1,15 @@
+# AgentTrustSec group policy — who may moderate / join which SLIM group channel.
+# TrustSec analogy: ISE deciding VLAN membership per 802.1X result, for a MACsec VLAN.
+# Deny by default: an unlisted channel has no members; an unlisted role is refused.
+# Wildcards ("*", "any", "all") are rejected by the loader.
+#
+# Admission (docs/P3-design.md §8): badge verifies (published, not revoked) -> the member's
+# SLIM token is signed by the badge-bound key (peer check) -> role allowed here ->
+# it answered the invite for the name it was invited under. Nothing is broadcast until
+# every member is admitted; failures are removed and audited.
+
+channels:
+  agenttrustsec/lab/reviewers:
+    moderator_roles: [intake]
+    member_roles: [reviewer]
+    attest_timeout_s: 10

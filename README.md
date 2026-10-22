@@ -98,7 +98,7 @@ SLIM 3.4.5 with `slim-bindings` 3.3.6, `mcp` 2.3). Details and reproducible prob
 | SLIM shared-secret mode is a **group PSK**: any name is accepted with the secret | JWT identity with a per-agent key instead |
 | SLIM JWT mode accepts **a trusted key claiming another name** | `peer` check binds name ↔ key itself |
 | SLIM silently **ignores trust keys without `alg`** | Such keys are refused loudly at startup |
-| In SLIM **group** sessions, an app registered under a reviewer's name with another trusted key is **admitted and can read** the next broadcast | PR5 design: no broadcast until every member attests (badge + key + group policy) |
+| In SLIM **group** sessions, an app registered under a reviewer's name with another trusted key is **admitted and can read** the next broadcast | Admission gate: no broadcast until every member attests (badge + key + group policy); the impostor is removed before the secret goes out |
 
 Live attack matrix against the real gateway process (all stopped as designed):
 
@@ -111,6 +111,8 @@ Live attack matrix against the real gateway process (all stopped as designed):
 | Revoked agent | `badge` — revoked |
 | Genuine executor pushing config in a read-only session | `intent` |
 | Impostor gateway with a copied server badge | agent rejects the result |
+| Impostor joins the reviewer group under a reviewer's name | admission `peer` — removed before any broadcast |
+| Fake moderator (valid agent, wrong role) invites reviewers | reviewers refuse it before attesting |
 
 ## Quick start
 
@@ -152,9 +154,11 @@ src/agenttrustsec/
   authz/broker.py        sealed sessions; single-use scoped tokens
   mcpgate/               gate as MCP middleware, agent-side client, gateway runner
   transport/slim.py      MCP over SLIM (MLS P2P); reports and pins the peer
+  transport/slim_group.py  attested MLS group sessions (reviewer pool)
+  authz/groups.py        group admission: badge → peer → group policy
   audit/log.py           JSONL audit writer
   tools/                 mock network tools and a mock external API
-policies/                tbac.yaml, identities.yaml, trust-jwks.json (public keys)
+policies/                tbac.yaml, identities.yaml, groups.yaml, trust-jwks.json (public keys)
 lab/                     Identity Node + SLIM compose files, key/revoke tools, probes
 scenarios/  eval/        attack/demo scenarios; ASTRA-based intent evaluation (P4)
 docs/                    ARCHITECTURE (threat model), notes-p1 (runbooks), P3-design
@@ -169,7 +173,7 @@ tests/                   unit tests + live tests against the lab
 | PA | MCP gateway, mutual server badges, token broker for external data | ✅ |
 | P1 | Learn by running SLIM, Identity, CASA | 🟡 SLIM + Identity done; CASA pending (needs Minikube) |
 | P2 | Real AGNTCY badges: issue, verify, revoke | ✅ incl. the revocation-replay fix |
-| P3 | SLIM transport with key-bound identity | 🟡 keys, adapter, peer check, gateway on SLIM done; attested reviewer groups next |
+| P3 | SLIM transport with key-bound identity | ✅ keys, adapter, peer check, gateway on SLIM, attested reviewer groups |
 | P4 | Semantic intent checker, evaluated on ASTRA | ⏳ |
 | P5 | Real agents: intake, reader (pyATS/mock), Palo Alto / FTD change reviewer, executor, rogue | ⏳ |
 | P6 | Live decisions dashboard, latency and block-rate benchmarks, node admission control | ⏳ |

@@ -63,7 +63,10 @@ src/agenttrustsec/
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
   agents/              # Agent implementations (phase 5)
   transport/slim.py    # MCP over SLIM (MLS P2P); reports + pins the peer, gate decides
+  transport/slim_group.py # Attested MLS group sessions: admission gate before any broadcast
+  authz/groups.py      # Group admission: badge -> peer -> group policy (deny by default)
 policies/tbac.yaml     # The "SGACL matrix"
+policies/groups.yaml   # Who may moderate / join each SLIM group channel
 policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
 policies/trust-jwks.json # PUBLIC keys SLIM may accept (binding enforced by the peer check)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
@@ -88,13 +91,13 @@ tests/                 # pytest — must stay green
       `lab/identity/revoke_badge.py`; node Verify misses replayed pre-revocation copies,
       so the verifier also checks the node's published copy. Original scope: implement `AgntcyBadgeVerifier` using the AGNTCY Identity
       Python SDK (verify JOSE-enveloped badges). Issue badges for 2 toy A2A agents.
-- [ ] **P3 Transport** — 🟡 design approved (`docs/P3-design.md`). PR1 done: per-agent keys,
+- [x] **P3 Transport** — design `docs/P3-design.md`. PR1 done: per-agent keys,
       badges re-issued with key thumbprint. PR2 done: `transport/slim.py` (MCP over
       MLS SLIM, `[slim]` extra, live tests vs `lab/slim/`). PR3 done: gate `peer` check
       (`authz/peer.py`, badge-bound key proof of possession). PR4 done: gateway + agents on
       SLIM (`serve.py --transport slim`, mutual peer checks, live attack matrix). PR5 design approved
-      (§8 attested groups); PR5a done: `intake-01` identity (role intake, moderator). Next: PR5b
-      `transport/slim_group.py` + `policies/groups.yaml`.
+      (§8 attested groups); PR5a done: `intake-01` identity (role intake, moderator). PR5b done:
+      attested groups (`transport/slim_group.py`, `authz/groups.py`, `policies/groups.yaml`).
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — TBAC from `policies/tbac.yaml` (done locally), then a real

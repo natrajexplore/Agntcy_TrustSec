@@ -209,6 +209,24 @@ channels:
 | Impostor moderator invites real reviewers | Members verify the moderator before attesting/reading |
 | **Remaining:** a legitimately admitted reviewer leaks content | Out of scope (insider); audit shows who was admitted when |
 
+### 8.3b As built (PR5b, 2026-10-22)
+
+`authz/groups.py` (policy + `admit()`, no vendor imports), `transport/slim_group.py`
+(`AttestedGroup`, `GroupMember`), `policies/groups.yaml`. Beyond the draft: before every
+broadcast the moderator compares the live participant list with moderator + admitted
+members (unknown → removed, nothing sent), and an unreadable membership list also refuses
+the broadcast. If the only member leaves, SLIM drops the group session.
+
+Live results (`tests/test_group_live.py`, member and moderator in separate processes):
+
+| Case | Result |
+|---|---|
+| genuine reviewer-01 | admitted (audit `group.join` ALLOW, checks badge/peer/group), receives the proposal, reply reaches the moderator |
+| Q7 impostor: reader-01's trusted key under reviewer's name with reviewer's badge | `refused by peer`, removed; the secret WAS broadcast afterwards and the impostor's raw feed does not contain it |
+| executor-01 (valid, wrong role) | `refused by group` (may not join), never sees the secret |
+| revoked agent | `refused by badge` (revoked), never sees the secret |
+| fake moderator executor-01 | reviewer refuses it (`may not moderate`) before attesting; moderator records `no attestation within 6s` |
+
 ### 8.4 Work order
 
 * **PR5a** — `intake-01` identity (key, OASF + badge with thumbprint, role in

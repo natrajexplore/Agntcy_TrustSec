@@ -130,12 +130,35 @@ relevance; a scoped value must appear in the sealed request as a whole token
 correct call blocked. `test_mcp` request now names the IP it looks up; the unnamed-IP
 variant is a new test that must BLOCK.
 
+## 4d. P4c local embedding matcher — results (2026-10-23), `eval/results/p4c-embedding.md`
+
+`fastembed==0.9.0` (`semantic` extra, ONNX, no torch), models cached under
+`~/.cache/agenttrustsec/fastembed`. `EmbeddingMatcher` modes absolute / margin / rank / combo;
+thresholds tuned on ASTRA validation, reported on test. bge-small: ~7.5 ms p50, ~15 ms p95
+per call on CPU.
+
+* **Standalone it is not a gate** (confirms the paper's SemSimM): best combo ≈ 77% accuracy
+  on ASTRA test N=1 but ~19% wrong / 10–22% null false-allow and ~25% false-block.
+* **As the cascade prefilter** (its deny is final):
+  * combo/margin (bge-small): ASTRA test denies 32% wrong / 10% null at 1.7% false-block —
+    but **netops false-block 11.1%**: c06/c07, legitimate `push_config` change requests,
+    because `review_change`/`show_acl` (same ACL topic) outrank `push_config`. The margin
+    rule assumes the right tool is clearly the best match; related-tool clusters break it.
+  * absolute only: safe (ASTRA 0.2%, netops 0% false-block) but denies little (ASTRA ~5%
+    wrong / 17% null; netops 1/8 off-domain).
+* bge-base catches more but its validation threshold over-blocked on test (2.7–4%); the bge
+  query prefix did not help.
+* Not done on purpose: rewording `push_config`'s description until c06/c07 pass would tune
+  policy to our own test cases (needs a held-out set first).
+
+**→ D2 revisited (owner decision pending):** the prefilter does not earn its place on our domain.
+
 ## 5. Work order (one PR each)
 
 * **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
   numbers for today's keyword checker** (free, no API).
 * **P4b** ✅ scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
-* **P4c** `EmbeddingMatcher` (local model, pinned) + eval numbers.
+* **P4c** ✅ `EmbeddingMatcher` (local model, pinned) + eval numbers — D2 revisit pending.
 * **P4d** `LlmMatcher` (+ cascade) + eval numbers — **paid runs only after you approve the budget**.
 * **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
   for offline dev; README/ARCHITECTURE update.

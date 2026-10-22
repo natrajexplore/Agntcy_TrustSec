@@ -1,6 +1,7 @@
 """P4: evaluate intent checks on our own netops cases (eval/netops_cases.yaml).
 
     python eval/netops_eval.py
+    python eval/netops_eval.py --embedding BAAI/bge-small-en-v1.5 --mode margin --threshold -0.12
 
 Runs (1) today's gate intent check, BaselineIntentChecker (change gate + tbac.yaml keyword
 overlap), and (2) each semantic matcher alone (no change gate), so both the full check and
@@ -44,7 +45,13 @@ def load(policy: TbacPolicy, path: Path = CASES) -> list[Case]:
     return out
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--embedding", help="also run EmbeddingMatcher with this fastembed model (live)")
+    ap.add_argument("--mode", default="margin")
+    ap.add_argument("--threshold", nargs="+", type=float, default=[-0.12])
+    args = ap.parse_args(argv)
     policy = TbacPolicy.from_yaml(ROOT / "policies" / "tbac.yaml")
     cases = load(policy)
     baseline = BaselineIntentChecker()
@@ -63,6 +70,16 @@ def main() -> int:
     print(TABLE_HEADER)
     runs = {"gate intent (change gate + scope + keywords)": run(gate_intent, cases),
             "lexical matcher only": run(lexical_only, cases)}
+    if args.embedding:
+        from agenttrustsec.authz.semantic import EmbeddingMatcher, fastembed_embedder
+        th = tuple(args.threshold) if args.mode == "combo" else args.threshold[0]
+        emb = EmbeddingMatcher(fastembed_embedder(args.embedding), th, args.mode)
+        emb.match("warm-up", cases[0].tools[0], cases[0].server_tools[SERVER])   # load model first
+
+        def embedding_only(case, tool):
+            r = emb.match(case.task, tool, case.server_tools[SERVER])
+            return r.allow, r.reason
+        runs[f"embedding {args.embedding.split('/')[-1]} {args.mode}={th} (live)"] = run(embedding_only, cases)
     for name, outcomes in runs.items():
         print(markdown_row(name, metrics(outcomes)))
     for name, outcomes in runs.items():

@@ -50,7 +50,7 @@ def main() -> int:
     baseline = BaselineIntentChecker()
 
     def gate_intent(case, tool):
-        r = baseline.check(Session(case.task, case.intent), policy.spec(tool.name))
+        r = baseline.check(Session(case.task, case.intent), policy.spec(tool.name), case.args)
         return r.passed, r.reason
 
     lexical = LexicalMatcher()
@@ -61,7 +61,7 @@ def main() -> int:
 
     print(f"netops cases: {len(cases)}  ({CASES.name})\n")
     print(TABLE_HEADER)
-    runs = {"gate intent today (change gate + keywords)": run(gate_intent, cases),
+    runs = {"gate intent (change gate + scope + keywords)": run(gate_intent, cases),
             "lexical matcher only": run(lexical_only, cases)}
     for name, outcomes in runs.items():
         print(markdown_row(name, metrics(outcomes)))

@@ -78,7 +78,7 @@ class Gate:
             checks.append(CheckResult("intent", Status.SKIPPED, "earlier check failed"))
         else:
             try:
-                checks.append(self.intent.check(call.session, spec))
+                checks.append(self.intent.check(call.session, spec, call.args))
             except Exception as e:  # noqa: BLE001
                 checks.append(CheckResult("intent", Status.ERROR, f"{type(e).__name__}: {e}"))
 

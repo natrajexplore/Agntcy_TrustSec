@@ -59,7 +59,8 @@ async def _call(server, verifier, broker, session, agent_id, role, tool, args,
     raise err
 
 
-READ = Session("Audit the ACLs on edge-fw-01 and check threat intel reputation", Intent.READ)
+READ = Session("Audit the ACLs on edge-fw-01 and check the threat intel reputation of "
+               "203.0.113.66", Intent.READ)
 
 
 def test_happy_path_read_over_mcp(server, verifier, broker, audit):
@@ -104,6 +105,16 @@ def test_T11_missing_session_blocked(server, verifier, broker):
         run(_call(server, verifier, broker, "", "reader-01", "reader",
                   "show_acl", {"device": "edge-fw-01"}))
     assert e.value.blocked_by == "session"
+
+
+def test_T6_external_lookup_of_unnamed_ip_blocked_by_scope(server, verifier, broker, intel):
+    # P4b: the request never names this IP, so the agent may not look it up (T6)
+    unnamed = Session("Audit the ACLs on edge-fw-01 and check threat intel reputation", Intent.READ)
+    with pytest.raises(McpBlocked) as e:
+        run(_call(server, verifier, broker, unnamed, "reader-01", "reader",
+                  "lookup_threat_intel", {"ip": "203.0.113.66"}))
+    assert e.value.blocked_by == "intent" and "scope" in e.value.reason
+    assert intel.served == []
 
 
 def test_external_data_via_brokered_token(server, verifier, broker, intel):

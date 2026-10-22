@@ -102,7 +102,8 @@ tests/                 # pytest — must stay green
       session for the reviewer pool. No agent opens an inbound port.
 - [ ] **P4 Authorization** — design `docs/P4-design.md` (D1 Opus 5.5, D2 cascade, D3 BLOCK; D6
       spend decided per run). P4a done: eval harness (`eval/harness.py`, `astra_eval.py`,
-      `netops_eval.py` + 48 cases), baseline in `eval/results/p4a-baseline.md`. Next: P4b scope check.
+      `netops_eval.py` + 48 cases), baseline in `eval/results/p4a-baseline.md`. P4b done: scope check
+      (`scoped_args` in tbac.yaml, T6; D5 = BLOCK). Next: P4c embedding matcher.
       TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.

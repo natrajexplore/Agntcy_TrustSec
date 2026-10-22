@@ -25,6 +25,9 @@ class ToolSpec:
     keywords: frozenset[str] = field(default_factory=frozenset)
     description: str = ""
     audience: str | None = None  # external resource reached via a brokered token
+    # P4b: args naming a target (device/IP) that must appear in the user request.
+    # None = undeclared -> the intent check BLOCKs every call (deny by default, D5).
+    scoped_args: tuple[str, ...] | None = None
 
 
 class TbacPolicy:
@@ -45,6 +48,12 @@ class TbacPolicy:
                 raise PolicyError(f"{name}: wildcard roles are forbidden (deny by default)")
             if "change" not in spec:
                 raise PolicyError(f"{name}: 'change' flag is required")
+            scoped = spec.get("scoped_args")
+            if scoped is not None:
+                if not isinstance(scoped, list) or not all(isinstance(a, str) and a for a in scoped):
+                    raise PolicyError(f"{name}: scoped_args must be a list of argument names")
+                if any(a in ("*", "any", "all") for a in scoped):
+                    raise PolicyError(f"{name}: wildcard scoped_args are forbidden")
             tools[name] = ToolSpec(
                 name=name,
                 change=bool(spec["change"]),
@@ -52,6 +61,7 @@ class TbacPolicy:
                 keywords=frozenset(k.lower() for k in spec.get("keywords", [])),
                 description=spec.get("description", ""),
                 audience=spec.get("audience"),
+                scoped_args=tuple(scoped) if scoped is not None else None,
             )
         return cls(tools)
 

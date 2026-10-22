@@ -6,41 +6,50 @@
 # keywords      -> baseline relevance check; replaced by semantic checker in P4
 # audience      -> external data source this tool reaches. On ALLOW the broker mints a
 #                  short-lived, single-use token for exactly this audience + tool.
+# scoped_args   -> (P4b, T6) argument(s) naming a TARGET (device, IP). Each value must be
+#                  named in the sealed user request, or the call is BLOCKED. REQUIRED for
+#                  every tool — `[]` if it has no target args; undeclared = BLOCK (D5).
 
 tools:
   show_running_config:
     change: false
     allowed_roles: [reader, executor]
     keywords: [config, configuration, running, audit, show, backup, verify]
+    scoped_args: [device]
     description: Read the running configuration of a device
 
   show_acl:
     change: false
     allowed_roles: [reader, reviewer]
     keywords: [acl, acls, access, rules, firewall, audit, permit, deny]
+    scoped_args: [device]
     description: List access-control entries on a device
 
   show_bgp_neighbors:
     change: false
     allowed_roles: [reader]
     keywords: [bgp, neighbor, neighbors, peering, routing]
+    scoped_args: [device]
     description: Show BGP neighbor state
 
   review_change:
     change: false
     allowed_roles: [reviewer]
     keywords: [review, audit, risk, acl, acls, change, firewall, rules]
+    scoped_args: [device]
     description: Risk-review an ACL / firewall rule set or proposed change
 
   push_config:
     change: true
     allowed_roles: [executor]
     keywords: [push, apply, change, configure, deploy, remove, add, acl, acls]
+    scoped_args: [device]
     description: Push configuration lines to a device (CHANGE)
 
   lookup_threat_intel:
     change: false
     allowed_roles: [reader, reviewer]
     keywords: [threat, intel, reputation, malicious, ip, ioc]
+    scoped_args: [ip]
     audience: threat-intel-api
     description: Look up IP reputation in an external threat-intel API

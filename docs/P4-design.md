@@ -120,11 +120,21 @@ name + description).
   so that is flattering. Its real gaps there: **6/7 scope cases allowed** (right tool,
   device/IP never named — T6) and the args-content case. P4b targets scope.
 
+## 4c. P4b scope check — as built (2026-10-23), `eval/results/p4b-scope.md`
+
+`tbac.yaml` `scoped_args` per tool (`[device]` / `[ip]`; `[]` = no targets; undeclared =
+BLOCK, **D5 = BLOCK, confirmed by owner**). The intent check is now change gate → scope →
+relevance; a scoped value must appear in the sealed request as a whole token
+(`10.0.0.1` ≠ `10.0.0.10`, `edge-fw-01` ≠ `edge-fw-010`). Netops: scope cases allowed
+6/7 → **0/7**, wrong-call false-allow 31.8% → **4.5%** (only a01, the args-content gap), no
+correct call blocked. `test_mcp` request now names the IP it looks up; the unnamed-IP
+variant is a new test that must BLOCK.
+
 ## 5. Work order (one PR each)
 
 * **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
   numbers for today's keyword checker** (free, no API).
-* **P4b** scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
+* **P4b** ✅ scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
 * **P4c** `EmbeddingMatcher` (local model, pinned) + eval numbers.
 * **P4d** `LlmMatcher` (+ cascade) + eval numbers — **paid runs only after you approve the budget**.
 * **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
@@ -135,8 +145,7 @@ name + description).
 **Owner decisions (2026-10-23):** D1 = **`claude-opus-5-5` only** (effort `low`); D2 = **cascade**
 (embedding deny-only prefilter → Claude); D3 = **BLOCK** when Claude is unreachable;
 D6 = **decide later** — P4a–P4c are free; ask again, with a measured estimate, before any
-paid run. D4 and D5 not yet answered: the recommended values below are **provisional**
-and will be raised again when they bite (D5 in P4b, D4 at P4e).
+paid run. D5 = **BLOCK** (confirmed 2026-10-23). D4 still provisional — raised again at P4e.
 
 Options as proposed:
 

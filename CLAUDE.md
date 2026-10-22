@@ -105,7 +105,9 @@ tests/                 # pytest — must stay green
       `netops_eval.py` + 48 cases), baseline in `eval/results/p4a-baseline.md`. P4b done: scope check
       (`scoped_args` in tbac.yaml, T6; D5 = BLOCK). P4c done: `EmbeddingMatcher` (fastembed,
       `semantic` extra) + `eval/results/p4c-embedding.md` — prefilter does not pay off on netops,
-      so D2 revised to **Claude only**. Next: P4d LLM matcher (paid runs need owner budget OK).
+      so D2 revised to **Claude only**. P4d step 1 done: `LlmMatcher` (`llm` extra,
+      anthropic==1.17.0, fail closed, paid eval runs need `--yes-spend`). Next: P4d step 2 = 20-case
+      paid pilot once the owner sets ANTHROPIC_API_KEY and OKs it.
       TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.

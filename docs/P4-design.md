@@ -155,13 +155,28 @@ per call on CPU.
 the gate; `EmbeddingMatcher` and these results stay in the repo as evidence (and as a possible
 future option once a held-out netops set exists).
 
+## 4e. P4d step 1 — LlmMatcher built, not yet evaluated (2026-10-23)
+
+`authz/semantic.py`: `LlmMatcher` + `anthropic_judge` adapter (`llm` extra,
+**`anthropic==1.17.0`** — latest 1.x; 2.0.0 shipped 2026-10-21 and is not verified here).
+Request: `claude-opus-5-5`, `output_config = {effort: low, format: strict JSON schema
+{verdict: allow|deny, reason}}`, no sampling params (rejected by the API since 2026-10-21),
+timeout 30 s, 1 SDK retry. Prompt = the sealed task + our tool name/description, as JSON data;
+optional `with_catalog` adds the server's other tools (to compare in step 2). Fail closed:
+non-`end_turn` stop (refusal, max_tokens), bad JSON, unknown verdict → deny; SDK errors
+propagate → gate ERROR → BLOCK (D3). Definitive verdicts cached per (task, tool).
+Server-side refusal **fallbacks are deliberately not enabled**: they would re-run a declined
+check on another model, against D1 (Opus 5.5 only); a refusal is simply a deny.
+Paid runs are opt-in: `astra_eval.py --matcher llm --limit N --yes-spend`,
+`netops_eval.py --llm --yes-spend`; both print measured tokens and list-price cost.
+
 ## 5. Work order (one PR each)
 
 * **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
   numbers for today's keyword checker** (free, no API).
 * **P4b** ✅ scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
 * **P4c** ✅ `EmbeddingMatcher` (local model, pinned) + eval numbers — D2 → Claude only.
-* **P4d** `LlmMatcher` (Claude only, D2 revised) + eval numbers — **paid runs only after you approve the budget**.
+* **P4d** step 1 ✅ `LlmMatcher` built + unit-tested (no spend); step 2 = paid eval — **paid runs only after you approve the budget**.
 * **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
   for offline dev; README/ARCHITECTURE update.
 

@@ -106,3 +106,25 @@ def test_lexical_baseline():
     assert "acl" in content_words("Audit the ACL on show_acl")
     assert LexicalMatcher().match("audit the acl", ToolRef("show_acl", "List ACL entries")).allow
     assert not LexicalMatcher().match("book a room", ToolRef("show_acl", "List ACL entries")).allow
+
+
+# --- P4d: paid runs are opt-in; pilots keep the label mix ---------------------------------
+
+@pytest.mark.parametrize("argv", [["--matcher", "llm"], ["--matcher", "llm-catalog", "--limit", "5"]])
+def test_paid_astra_runs_refuse_without_yes_spend(argv):
+    with pytest.raises(SystemExit):
+        astra_eval.main(argv)
+
+
+def test_paid_netops_run_refuses_without_yes_spend():
+    with pytest.raises(SystemExit):
+        netops_eval.main(["--llm"])
+
+
+def test_stratified_sample_keeps_label_mix():
+    cases = ([Case(f"c{i}", (A,), "correct") for i in range(50)] +
+             [Case(f"w{i}", (A,), "wrong") for i in range(40)] +
+             [Case(f"n{i}", (A,), "null") for i in range(10)])
+    s = astra_eval.stratified(cases, 20)
+    assert [sum(c.label == lab for c in s) for lab in ("correct", "wrong", "null")] == [10, 8, 2]
+    assert astra_eval.stratified(cases, 0) is cases

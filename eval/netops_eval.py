@@ -51,7 +51,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--embedding", help="also run EmbeddingMatcher with this fastembed model (live)")
     ap.add_argument("--mode", default="margin")
     ap.add_argument("--threshold", nargs="+", type=float, default=[-0.12])
+    ap.add_argument("--llm", action="store_true", help="also run LlmMatcher (PAID: needs --yes-spend)")
+    ap.add_argument("--yes-spend", action="store_true")
     args = ap.parse_args(argv)
+    if args.llm and not args.yes_spend:
+        ap.error("--llm calls the Claude API (costs money): pass --yes-spend after the owner OKs it")
     policy = TbacPolicy.from_yaml(ROOT / "policies" / "tbac.yaml")
     cases = load(policy)
     baseline = BaselineIntentChecker()
@@ -80,6 +84,15 @@ def main(argv: list[str] | None = None) -> int:
             r = emb.match(case.task, tool, case.server_tools[SERVER])
             return r.allow, r.reason
         runs[f"embedding {args.embedding.split('/')[-1]} {args.mode}={th} (live)"] = run(embedding_only, cases)
+    llm = None
+    if args.llm:
+        from agenttrustsec.authz.semantic import LlmMatcher, anthropic_judge
+        llm = LlmMatcher(anthropic_judge())
+
+        def llm_only(case, tool):
+            r = llm.match(case.task, tool, case.server_tools[SERVER])
+            return r.allow, r.reason
+        runs["llm claude-opus-5-5 (live)"] = run(llm_only, cases)
     for name, outcomes in runs.items():
         print(markdown_row(name, metrics(outcomes)))
     for name, outcomes in runs.items():
@@ -88,6 +101,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {cat:<13} {s['allowed']:>2}/{s['n']:<2} allowed  (labels {','.join(s['labels'])})")
         missed = [o.case.id for o in outcomes if o.allowed and o.case.label != "correct"]
         print(f"  false-allows: {', '.join(missed) or 'none'}")
+    if llm is not None:
+        from astra_eval import report_spend
+        report_spend(llm)
     return 0
 
 

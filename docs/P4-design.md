@@ -151,22 +151,24 @@ per call on CPU.
 * Not done on purpose: rewording `push_config`'s description until c06/c07 pass would tune
   policy to our own test cases (needs a held-out set first).
 
-**→ D2 revisited (owner decision pending):** the prefilter does not earn its place on our domain.
+**→ D2 revisited 2026-10-23 — owner decision: Claude only.** The embedding prefilter is dropped from
+the gate; `EmbeddingMatcher` and these results stay in the repo as evidence (and as a possible
+future option once a held-out netops set exists).
 
 ## 5. Work order (one PR each)
 
 * **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
   numbers for today's keyword checker** (free, no API).
 * **P4b** ✅ scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
-* **P4c** ✅ `EmbeddingMatcher` (local model, pinned) + eval numbers — D2 revisit pending.
-* **P4d** `LlmMatcher` (+ cascade) + eval numbers — **paid runs only after you approve the budget**.
+* **P4c** ✅ `EmbeddingMatcher` (local model, pinned) + eval numbers — D2 → Claude only.
+* **P4d** `LlmMatcher` (Claude only, D2 revised) + eval numbers — **paid runs only after you approve the budget**.
 * **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
   for offline dev; README/ARCHITECTURE update.
 
 ## 6. Decisions
 
-**Owner decisions (2026-10-23):** D1 = **`claude-opus-5-5` only** (effort `low`); D2 = **cascade**
-(embedding deny-only prefilter → Claude); D3 = **BLOCK** when Claude is unreachable;
+**Owner decisions (2026-10-23):** D1 = **`claude-opus-5-5` only** (effort `low`); D2 = cascade, **revised after P4c to Claude
+only** (§4d); D3 = **BLOCK** when Claude is unreachable;
 D6 = **decide later** — P4a–P4c are free; ask again, with a measured estimate, before any
 paid run. D5 = **BLOCK** (confirmed 2026-10-23). D4 still provisional — raised again at P4e.
 

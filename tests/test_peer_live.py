@@ -45,15 +45,17 @@ def jwk(name):
     return trust_jwk(k.public_key())
 
 
-TRUST = [jwk(n) for n in ("reader-01", "reviewer-01", "executor-01", "netops-mcp")]
+def trust():
+    # Lazy: never touch key files at import (CI and other machines have none).
+    return [jwk(n) for n in ("reader-01", "reviewer-01", "executor-01", "netops-mcp")]
 
 
 _CHILD = """
 import json, sys
 sys.path[:0] = sys.argv[3:]
-from test_peer_live import TRUST, pem
+from test_peer_live import trust, pem
 from test_slim_transport import run_exchange
-_, seen, *_ = run_exchange(pem(sys.argv[1]), lambda n: n, TRUST, agent_name=sys.argv[2])
+_, seen, *_ = run_exchange(pem(sys.argv[1]), lambda n: n, trust(), agent_name=sys.argv[2])
 p = seen[0]
 print("PEER " + json.dumps([p.source_name, p.subject, p.token]))
 """
@@ -78,12 +80,12 @@ def reader_ident():
 
 
 def test_real_reader_proves_its_badge_key(reader_ident):
-    r = PeerBinding(TRUST).check(peer_seen_by_gateway("reader-01", BY_ROLE["reader"]), reader_ident)
+    r = PeerBinding(trust()).check(peer_seen_by_gateway("reader-01", BY_ROLE["reader"]), reader_ident)
     assert r.status is Status.PASS, r.reason
 
 
 def test_executor_key_presenting_reader_badge_is_blocked(reader_ident):
     # executor-01's key is TRUSTED by SLIM, it uses reader-01's SLIM name and badge:
     # SLIM lets the session form; only the badge-bound key check stops it.
-    r = PeerBinding(TRUST).check(peer_seen_by_gateway("executor-01", BY_ROLE["reader"]), reader_ident)
+    r = PeerBinding(trust()).check(peer_seen_by_gateway("executor-01", BY_ROLE["reader"]), reader_ident)
     assert r.status is Status.FAIL and "not signed by the badge's key" in r.reason

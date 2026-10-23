@@ -130,7 +130,8 @@ tests/                 # pytest — must stay green
       dashboard (+ optional `--serve`), P6c Mermaid README diagrams. P6a done: per-check +
       decision `elapsed_ms` in the audit, `eval/bench.py` (offline / live), results in
       `eval/results/p6a-latency.md` (read 26 ms, new change 4.5 s = LLM, gate logic ~0.1 ms).
-      Dashboard of ALLOW/BLOCK decisions; latency and
+      P6b done: `dashboard.py` (self-contained HTML from an audit dir, `--serve` = 127.0.0.1 live).
+      Next: P6c README diagrams. Dashboard of ALLOW/BLOCK decisions; latency and
       block-rate numbers (optionally via `outshift-open/mas-lab`); README diagrams.
 
 ## Commands
@@ -141,6 +142,7 @@ uv pip install -e ".[dev]"
 pytest -q
 python -m agenttrustsec.demo      # runs scenarios/rogue_agent.yaml against the gate
 python -m agenttrustsec.demo_live [--quick]   # P5e end-to-end on the live lab (needs lab + Ollama)
+python -m agenttrustsec.dashboard [run dir] [--serve]   # P6b decisions dashboard from audit trails
 # P3 gateway over SLIM (needs both lab nodes + keys): see docs/P3-design.md §7
 python -m agenttrustsec.mcpgate.serve --transport slim --server-id <gateway metadata id>
 ```

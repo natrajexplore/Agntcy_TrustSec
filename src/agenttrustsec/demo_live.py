@@ -344,6 +344,7 @@ def run(quick: bool, audit_dir: Path = ROOT / "audit") -> int:
     print("\n== Gateway decisions (ISE Live Logs view, UTC; * = claimed identity, never verified) ==")
     print("\n".join(live_logs(lab.audit("gateway"))) or "  (none)")
     print(f"\nAudit trails: {run_dir}")
+    print(f'Dashboard:    python -m agenttrustsec.dashboard "{run_dir}"')
     if mem.baseline is not None and mem.peak is not None:
         print(f"Memory in use: {mem.baseline / 1024:.1f} GB before -> peak {mem.peak / 1024:.1f} GB "
               f"(+{(mem.peak - mem.baseline) / 1024:.1f} GB during the run; includes Ollama only if it "

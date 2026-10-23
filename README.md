@@ -189,6 +189,19 @@ Measured on the 15.5 GB dev laptop (cold model): 8.9 GB in use before the run, *
 peak** (+5.3 GB, almost all of it the 5.5 GB local model), ~50 s for the full run. Acts 1–3 run
 before the impersonated agents start because SLIM routes by name.
 
+### Decisions dashboard (P6b)
+
+```bash
+python -m agenttrustsec.dashboard                 # latest demo run -> audit/demo-<time>/dashboard.html
+python -m agenttrustsec.dashboard --serve         # live view on http://127.0.0.1:8765, refreshes every 2 s
+```
+
+One self-contained HTML file (no server, no CDN): totals, blocks per check, decision-time
+histogram, the demo's expected-vs-actual table, and an ISE Live Logs-style table across every
+audit trail (gateway, group admissions, agent dispatch) — filter by source, agent, tool, verdict
+or blocking check; click a row for every check with its reason and time. `*` marks a claimed
+identity that was never verified.
+
 ### What it costs (P6a, `eval/results/p6a-latency.md`)
 
 | Call through the live gateway | p50 end to end | of which the gate |

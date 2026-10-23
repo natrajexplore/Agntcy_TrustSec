@@ -1,7 +1,9 @@
 # SLIM node for the lab — the "fabric" agents connect OUT to (no agent opens a port).
-# Upstream config/base/server-config.yaml (agntcy/slim). LAB ONLY: plaintext gRPC
-# (tls.insecure) and no transport auth; the compose file binds it to 127.0.0.1.
-# Message confidentiality between agents comes from MLS sessions, not this hop.
+# Upstream config/mtls/server-config.yaml (agntcy/slim @ slim-v3.4.5). LAB ONLY.
+# Item E: mTLS node admission — TLS on the hop, and only clients with a cert from the lab CA
+# (lab/slim/pki.py) get on at all. /pki = ~/.agenttrustsec/pki/node mounted read-only (node
+# cert + key and the CA *certificate*; the CA private key is never mounted).
+# Message confidentiality between agents still comes from MLS sessions end to end.
 tracing:
   log_level: info
   display_thread_names: true
@@ -20,5 +22,11 @@ services:
       servers:
         - endpoint: "0.0.0.0:46357"
           tls:
-            insecure: true
+            source:
+              type: file
+              cert: "/pki/server.crt"
+              key: "/pki/server.key"
+            client_ca:
+              type: file
+              path: "/pki/ca.crt"
       clients: []

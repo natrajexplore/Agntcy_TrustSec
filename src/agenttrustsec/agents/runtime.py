@@ -29,7 +29,7 @@ IDENTITIES = ROOT / "policies" / "identities.yaml"
 TRUST_JWKS = ROOT / "policies" / "trust-jwks.json"
 KEY_DIR = Path.home() / ".agenttrustsec" / "keys"
 NODE_HTTP = "http://localhost:4000"
-SLIM_ENDPOINT = "http://127.0.0.1:46357"
+SLIM_ENDPOINT = "https://127.0.0.1:46357"
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,8 @@ class AgentRuntime:
         self.badge = fetch_current_badge(self.cfg.node_http, self.cfg.metadata_id)
         name = slim_name(self.cfg.metadata_id)
         pem = self.cfg.key_path.read_text(encoding="utf-8")
-        self.endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), self.cfg.slim_endpoint)
+        self.endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), self.cfg.slim_endpoint,
+                                          key_pem=pem)
         return self
 
     def server_verifier(self) -> AgntcyBadgeVerifier:

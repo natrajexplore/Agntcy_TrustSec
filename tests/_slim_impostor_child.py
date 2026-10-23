@@ -32,7 +32,7 @@ async def main():
     server = build_server("netops-mcp", make_gate(AUDIT, None), broker, copied_badge, netops.REGISTRY)
     name = slim_name(GW)
     pem = (Path.home() / ".agenttrustsec" / "keys" / "executor-01.pem").read_text()
-    ep = await slim.connect(name, slim.jwt_identity(pem, name, trust))
+    ep = await slim.connect(name, slim.jwt_identity(pem, name, trust), key_pem=pem)   # executor's enrolled device
     print("READY", flush=True)
     await slim.serve_slim(server, ep)
 

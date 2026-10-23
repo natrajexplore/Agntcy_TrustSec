@@ -2,7 +2,10 @@
 slim-bindings is installed and the node answers on 127.0.0.1:46357.
 
 Proves the adapter carries MCP over an MLS session and REPORTS the peer faithfully —
-including a spoofed subject, which SLIM accepts and the gate must reject (PR3)."""
+including a spoofed subject, which SLIM accepts and the gate must reject (PR3).
+
+Item E: the node admits DEVICES by mTLS cert. These tests exercise the SLIM identity layer
+behind it, so the throwaway app keys ride an enrolled lab device (reader-01's cert)."""
 import asyncio
 import base64
 import json
@@ -21,6 +24,8 @@ from mcp.server.mcpserver import MCPServer  # noqa: E402
 from agenttrustsec.identity.keys import public_jwk  # noqa: E402
 from agenttrustsec.transport import slim  # noqa: E402
 
+DEVICE = (__import__("pathlib").Path.home() / ".agenttrustsec" / "keys" / "reader-01.pem")
+
 
 def _node_up():
     try:
@@ -30,7 +35,7 @@ def _node_up():
         return False
 
 
-pytestmark = pytest.mark.skipif(not _node_up(), reason="lab SLIM node not running")
+pytestmark = pytest.mark.skipif(not (_node_up() and DEVICE.exists()), reason="lab SLIM node / lab keys missing")
 
 
 def keypair(kid):
@@ -67,9 +72,10 @@ def run_exchange(agent_pem, agent_sub, trust, *, agent_name=None):
     server.add_tool(lambda text: f"echo:{text}", name="echo")
 
     async def go():
-        gw = await slim.connect(gw_name, slim.jwt_identity(gw_pem, gw_name, trust))
+        device = DEVICE.read_text()
+        gw = await slim.connect(gw_name, slim.jwt_identity(gw_pem, gw_name, trust), key_pem=device)
         sub = agent_sub(ag_name) if callable(agent_sub) else agent_sub
-        ag = await slim.connect(ag_name, slim.jwt_identity(agent_pem, sub, trust))
+        ag = await slim.connect(ag_name, slim.jwt_identity(agent_pem, sub, trust), key_pem=device)
         serving = asyncio.create_task(slim.serve_slim(server, gw))
         try:
             transport = slim.SlimClientTransport(ag, gw_name)

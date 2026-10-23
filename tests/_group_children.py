@@ -39,7 +39,8 @@ def verifier():
 
 async def connect(cfg, trust):
     name = cfg.get("slim_name") or slim_name(cfg.get("agent_id") or cfg["claim"])
-    return await slim.connect(name, slim.jwt_identity(private_pem(cfg["key"]), name, trust))
+    pem = private_pem(cfg["key"])
+    return await slim.connect(name, slim.jwt_identity(pem, name, trust), key_pem=pem)
 
 
 async def moderator(cfg):

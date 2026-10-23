@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--port", type=int, default=9090, help="HTTP issuance mode only")
     ap.add_argument("--server-id", help="this server's AGNTCY metadata id (badge subject)")
     ap.add_argument("--node", default="http://localhost:4000", help="Identity Node HTTP")
-    ap.add_argument("--slim", default="http://127.0.0.1:46357", help="SLIM node endpoint")
+    ap.add_argument("--slim", default="https://127.0.0.1:46357", help="SLIM node endpoint (mTLS)")
     ap.add_argument("--name", default="netops-mcp")
     ap.add_argument("--key", type=Path, help="private key PEM (default ~/.agenttrustsec/keys/<name>.pem)")
     ap.add_argument("--trust-jwks", type=Path, default=TRUST_JWKS)
@@ -193,7 +193,7 @@ async def _serve_slim(args: argparse.Namespace) -> int:
     badge = fetch_server_badge(args.node, args.server_id, serving)
     server = build_server(args.name, gate, broker, badge, registry)
     name = slim_name(args.server_id)
-    endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), args.slim)
+    endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), args.slim, key_pem=pem)
     print(f"{args.name}: slim {name} via {args.slim}  badge=verified {args.server_id}  "
           f"key={thumb}  jti-db={args.jti_db}  peer-check=ON  change-tools-llm={llm_model}", flush=True)
     await slim.serve_slim(server, endpoint)

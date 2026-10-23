@@ -122,10 +122,21 @@ def test_spoofed_token_subject_blocked_by_peer():
     assert r.get("blocked_by") == "peer" and "identity mismatch" in r["reason"], r
 
 
-def test_key_outside_trust_never_reaches_the_gate(audit_path):
+def test_unenrolled_device_is_refused_by_the_node(audit_path):
+    # item E: no lab client cert -> the node refuses the TLS connection; nothing reaches the gate
     before = len(audit_path.read_text().splitlines())
     r = agent(key="__ephemeral__", slim_name=slim_name(READER), claim=READER, badge_id=READER,
               tool="show_acl", args=ACL)
+    assert "NodeRefused: node refused the unenrolled device" in r.get("session_error", ""), r
+    assert len(audit_path.read_text().splitlines()) == before
+
+
+def test_key_outside_trust_never_reaches_the_gate_even_on_an_enrolled_device(audit_path):
+    # defence in depth behind node admission: an app key outside the trust JWKS, riding an
+    # enrolled device (reader-01's cert), is still dropped by SLIM's identity check
+    before = len(audit_path.read_text().splitlines())
+    r = agent(key="__ephemeral__", device="reader-01", slim_name=slim_name(READER), claim=READER,
+              badge_id=READER, tool="show_acl", args=ACL)
     assert "failed to add participant" in r.get("session_error", ""), r
     assert len(audit_path.read_text().splitlines()) == before     # SLIM dropped it first
 

@@ -10,6 +10,9 @@ app checks it against a trust JWKS. SLIM does NOT bind key<->name or routing
 name<->subject (docs/P3-design.md §1), so this module only REPORTS who the peer is
 (`SlimPeer`, pinned per session); the gate's `peer` check decides (PR3).
 
+Node admission (item E, transport/tls.py): the hop to the node is mTLS — only a key enrolled
+in the lab PKI gets a connection; there is no plaintext path.
+
 Verified against slim-bindings 3.3.6 (core 3.4.5) and mcp 2.3. Pattern from
 agntcy/slim-mcp-python, which pins mcp 1.26 / bindings 1.4 and disables MLS.
 """
@@ -29,11 +32,12 @@ import slim_bindings as sb
 from mcp.shared.message import SessionMessage
 
 from agenttrustsec.models import TransportPeer
+from agenttrustsec.transport import tls
 from agenttrustsec.transport.peer import CURRENT_PEER
 
 log = logging.getLogger(__name__)
 
-DEFAULT_ENDPOINT = "http://127.0.0.1:46357"
+DEFAULT_ENDPOINT = "https://127.0.0.1:46357"
 ISSUER = "agenttrustsec-lab"
 AUDIENCE = ["agenttrustsec"]
 PEER_SUBJECT = "slim-peer-subject"
@@ -75,7 +79,7 @@ def jwt_identity(private_key_pem: str, subject: str, trust_jwks: list[dict[str, 
 
 
 _service: Any = None
-_connections: dict[str, int] = {}
+_connections: dict[tuple[str, str], int] = {}     # (endpoint, client key) -> mTLS connection
 
 
 def _get_service() -> Any:
@@ -95,13 +99,17 @@ class SlimEndpoint:
     name: str
 
 
-async def connect(local_name: str, identity: tuple[Any, Any],
-                  endpoint: str = DEFAULT_ENDPOINT) -> SlimEndpoint:
-    """Create a SLIM app under `local_name` with JWT `identity` and dial OUT to the node."""
+async def connect(local_name: str, identity: tuple[Any, Any], endpoint: str = DEFAULT_ENDPOINT, *,
+                  key_pem: str) -> SlimEndpoint:
+    """Create a SLIM app under `local_name` with JWT `identity` and dial OUT to the node over
+    mTLS with the client cert enrolled for `key_pem` (tls.NotEnrolled if there is none).
+    `key_pem` is the DEVICE key the node admits; agents pass their own key (one key for badge,
+    SLIM token and TLS cert). Admission is per device; the app's name/identity is checked later."""
+    cfg = tls.client_config(endpoint, key_pem)          # before any contact: no cert, no dial
     svc = _get_service()
-    if endpoint not in _connections:
-        _connections[endpoint] = await svc.connect_async(sb.new_insecure_client_config(endpoint))
-    conn = _connections[endpoint]
+    if (endpoint, key_pem) not in _connections:
+        _connections[(endpoint, key_pem)] = await svc.connect_async(cfg)
+    conn = _connections[(endpoint, key_pem)]
     name = sb.Name.from_string(local_name)
     app = svc.create_app(name, *identity)
     await app.subscribe_async(name, conn)

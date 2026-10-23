@@ -55,6 +55,7 @@ Design principles (non-negotiable, see `CLAUDE.md`):
 | Posture / context | User intent (`read` vs `change`) sealed into the session at intake |
 | CRL / OCSP check | Badge must be **published and not revoked** on the Identity Node |
 | MACsec / encrypted fabric | **SLIM** sessions with **MLS** end-to-end encryption |
+| 802.1X + MACsec on the uplink | **mTLS node admission** — only devices with a lab-CA cert (over their own key) reach the SLIM node |
 | Enforcement point (switch) | `authz/gate.py`, run as MCP server middleware |
 | Switch authenticating to ISE | Agent verifies the MCP gateway's badge **and key** (mutual auth) |
 | Per-session dACL | Broker-minted, single-use token scoped to one tool + audience |
@@ -202,7 +203,8 @@ Full lab (Identity Node, SLIM node, real badges, gateway over SLIM):
 ```bash
 uv pip install -e ".[dev,agntcy,slim]"
 docker compose -f lab/identity/docker-compose.yml up -d
-docker compose -f lab/slim/docker-compose.yml up -d
+python lab/slim/pki.py          # lab CA + node cert + one mTLS client cert per agent key (~/.agenttrustsec/pki)
+docker compose -f lab/slim/docker-compose.yml up -d     # node admits only enrolled devices (mTLS)
 export AGENTTRUSTSEC_BROKER_KEY=$(python -c "import secrets;print(secrets.token_hex(32))")
 export IDENTITY_NODE_GRPC_SERVER_URL=localhost:4001 IDENTITY_NODE_USE_SSL=0
 python -m agenttrustsec.mcpgate.serve --transport slim --server-id <gateway metadata id>
@@ -329,6 +331,7 @@ tests/                   unit tests + live tests against the lab
 | A | Change request → config: pushed lines rendered from the reviewed CR, cross-checked by reviewers | ✅ |
 | B | Spent approvals / tokens persisted (SQLite): no replay after a gateway restart | ✅ |
 | C | Gateway refuses to start if its tools drift from its signed badge; agents trust only signed tools; badge re-issued | ✅ |
+| E | mTLS node admission: only devices with a lab-CA cert (over their own key) reach the SLIM node; TLS 1.3 hop | ✅ |
 
 ## Built on
 

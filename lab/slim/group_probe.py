@@ -1,5 +1,8 @@
 """Probe SLIM GROUP sessions with MLS for the P3 PR5 design (reviewer pool). LAB ONLY.
 
+HISTORICAL (P1/P3 findings, docs/notes-p1.md): written for the plaintext lab node. Since item E
+the node requires mTLS client certs (lab/slim/pki.py), so this probe no longer connects as is.
+
     python lab/slim/group_probe.py          # needs the lab SLIM node (lab/slim/)
 
 One process, fresh names per run, JWT identity with a fresh key per app. Moderator M

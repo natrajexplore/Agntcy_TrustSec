@@ -55,6 +55,34 @@ def private_pem(key: str) -> str:
     return (KEY_DIR / f"{key}.pem").read_text()
 
 
+class NodeRefused(Exception):
+    """The SLIM node refused the device at the TLS layer (item E)."""
+
+
+async def rogue_connect(name: str, pem: str, sub: str, trust: list, device: str | None = None):
+    """An attacker's dial-in. `device` = whose enrolled device it rides (default: its own key).
+    An unenrolled device does NOT stop at our adapter's refusal: it dials the node anyway over TLS
+    with no client cert, so the node itself must refuse it."""
+    import slim_bindings as sb
+
+    from agenttrustsec.transport import slim, tls
+    device_pem = private_pem(device) if device else pem
+    try:
+        return await slim.connect(name, slim.jwt_identity(pem, sub, trust), key_pem=device_pem)
+    except tls.NotEnrolled:
+        cfg = sb.new_secure_client_config(slim.DEFAULT_ENDPOINT)
+        cfg.tls = sb.TlsClientConfig(insecure=False, insecure_skip_verify=True, source=sb.TlsSource.NONE(),
+                                     ca_source=sb.CaSource.NONE(), include_system_ca_certs_pool=False,
+                                     tls_version="tls1.3")
+        try:
+            conn = await slim._get_service().connect_async(cfg)
+            app = slim._get_service().create_app(sb.Name.from_string(name), *slim.jwt_identity(pem, sub, trust))
+            await app.subscribe_async(sb.Name.from_string(name), conn)
+        except Exception as e:  # noqa: BLE001 - the expected outcome
+            raise NodeRefused(f"node refused the unenrolled device: {type(e).__name__}: {str(e)[:160]}") from None
+        raise RuntimeError("UNEXPECTED: node accepted a device without a client cert")
+
+
 def _broker():
     from agenttrustsec.authz.broker import TokenBroker
     return TokenBroker(bytes.fromhex(os.environ["AGENTTRUSTSEC_BROKER_KEY"]))
@@ -65,6 +93,7 @@ def _broker():
 async def gateway_call(cfg: dict) -> dict:
     """cfg: key (name in the key dir or "__ephemeral__"), slim_name, sub (token subject, default
     slim_name), claim (agent id claimed in _meta), badge_id (whose badge to copy) or badge_jose,
+    device (ride another key's enrolled device, item E),
     tool, args, intent, prompt, gateway_id, approve (mint an approval for args), approve_lines
     (approve OTHER lines), repeat (call N times with the same approval), session + approval
     (captured tokens, replayed verbatim)."""
@@ -81,7 +110,7 @@ async def gateway_call(cfg: dict) -> dict:
     from agenttrustsec.transport import slim
     trust = load_trust_jwks(TRUST_JWKS)
     name = cfg["slim_name"]
-    ep = await slim.connect(name, slim.jwt_identity(private_pem(cfg["key"]), cfg.get("sub", name), trust))
+    ep = await rogue_connect(name, private_pem(cfg["key"]), cfg.get("sub", name), trust, cfg.get("device"))
     badge = cfg.get("badge_jose") or current_badge(cfg["badge_id"])
     broker = _broker()
     session = Session(cfg.get("prompt", "Audit the ACLs on edge-fw-01"), Intent(cfg.get("intent", "read")))
@@ -154,7 +183,7 @@ async def group_impostor(seconds: float = 90) -> dict:
     reviewer = agent_id("reviewer-01")
     trust = load_trust_jwks(TRUST_JWKS)
     name = slim_name(reviewer)
-    ep = await slim.connect(name, slim.jwt_identity(private_pem("reader-01"), name, trust))
+    ep = await rogue_connect(name, private_pem("reader-01"), name, trust)
     print("LISTENING", flush=True)
     out: dict[str, Any] = {"seen": []}
     try:

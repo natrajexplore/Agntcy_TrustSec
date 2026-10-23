@@ -32,6 +32,7 @@ from typing import Any, Callable
 import yaml
 
 from agenttrustsec.agents.runtime import KEY_DIR, REGISTRY, ROOT
+from agenttrustsec.transport import tls
 
 PY = sys.executable
 CR1001_REQ = "Add a rule on edge-fw-01 so the payments API in web-dmz can query the transaction DB (CR-1001)"
@@ -134,6 +135,11 @@ def preflight() -> list[str]:
     for name in ("netops-mcp", "intake-01", "reader-01", "reviewer-01", "executor-01"):
         if not (KEY_DIR / f"{name}.pem").exists():
             missing.append(f"key {KEY_DIR / (name + '.pem')}")
+            continue
+        try:                                        # item E: enrolled for mTLS to the node
+            tls.client_cert((KEY_DIR / f"{name}.pem").read_text())
+        except tls.NotEnrolled as e:
+            missing.append(f"mTLS cert for {name}: {e}")
     try:
         urllib.request.urlopen("http://localhost:11434/api/tags", timeout=3).close()
     except OSError:

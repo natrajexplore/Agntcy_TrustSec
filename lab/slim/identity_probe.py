@@ -1,5 +1,8 @@
 r"""Probe: what does MessageContext.identity carry, and does SLIM JWT mode bind key->name?
 
+HISTORICAL (P1/P3 findings, docs/notes-p1.md): written for the plaintext lab node. Since item E
+the node requires mTLS client certs (lab/slim/pki.py), so this probe no longer connects as is.
+
 Usage (repo root):
   uvx --python 3.12 --with slim-bindings==3.3.6 --with cryptography \
       python -I lab/slim/identity_probe.py <mode>

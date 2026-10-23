@@ -3,7 +3,8 @@
 #
 #   docker compose -f lab/slim/docker-compose.yml up -d
 #
-# Agents connect to http://127.0.0.1:46357.
+# Agents connect to https://127.0.0.1:46357 with mTLS (item E): run lab/slim/pki.py first;
+# the node cert/key + CA cert are mounted read-only from ~/.agenttrustsec/pki/node.
 name: agenttrustsec-slim
 services:
   slim:
@@ -12,5 +13,6 @@ services:
     command: ["/slim", "--config", "/config.yaml"]
     volumes:
       - ./server-config.yaml:/config.yaml:ro
+      - ${AGENTTRUSTSEC_PKI_NODE:-~/.agenttrustsec/pki/node}:/pki:ro
     ports:
       - "127.0.0.1:46357:46357"

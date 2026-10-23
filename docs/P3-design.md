@@ -71,7 +71,7 @@ The client does the mirror check on the gateway (server-side mutual auth, closes
 | Valid agent claims another agent's name over SLIM | BLOCK at `peer` steps 2/4/5 |
 | Revoked agent | BLOCK at `badge` (published-status check, P2) |
 | SLIM node / network reads tool args | MLS ciphertext only |
-| **Remaining:** anyone can connect to the lab node (no node admission auth, plaintext hop) | Node can be flooded / sees metadata (names, sizes). Node mTLS/JWT admission = D5 |
+| ~~Anyone can connect to the lab node (no node admission auth, plaintext hop)~~ | **Resolved (item E, §9):** mTLS node admission — unenrolled device / plaintext / foreign-CA cert refused by the node |
 
 ## 4b. Found while building (PR2–PR3)
 
@@ -111,15 +111,16 @@ The client does the mirror check on the gateway (server-side mutual auth, closes
 * **D4 HTTP:** after P3 the gateway serves tool calls **only over SLIM**; HTTP stays only in
   badge-issuance mode (which already refuses every `tools/call`). Recommended.
 * **D5 Node admission:** keep the lab node open (127.0.0.1 only) in P3; add node mTLS/JWT
-  admission in P6. Recommended.
+  admission in P6. Recommended. → Done as item E (§9): mTLS.
 
 ## 7. Running it (as built, PR4)
 
 ```bash
 docker compose -f lab/identity/docker-compose.yml up -d    # or the upstream node
-docker compose -f lab/slim/docker-compose.yml up -d
 uv pip install -e ".[dev,agntcy,slim]"
 python lab/identity/agent_keys.py reader-01 reviewer-01 executor-01 netops-mcp     --export-jwks policies/trust-jwks.json                   # public keys only
+python lab/slim/pki.py                                      # item E: lab CA + node/client certs
+docker compose -f lab/slim/docker-compose.yml up -d
 export AGENTTRUSTSEC_BROKER_KEY=$(python -c "import secrets;print(secrets.token_hex(32))")
 export IDENTITY_NODE_GRPC_SERVER_URL=localhost:4001 IDENTITY_NODE_USE_SSL=0
 python -m agenttrustsec.mcpgate.serve --transport slim --server-id AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add
@@ -250,3 +251,34 @@ Live results (`tests/test_group_live.py`, member and moderator in separate proce
 * **G4 Attestation timeout** 10 s, failure = remove + audit (**recommended**).
 * **G5 Member-side moderator verification** required (**recommended**) vs trusting any
   inviter (impostor moderator could feed fake proposals and harvest attestations).
+
+## 9. Item E as built (2026-10-23) — mTLS node admission (owner: mTLS, Identity Node gRPC left as is)
+
+TrustSec analogy: 802.1X + MACsec on the fabric uplink — only enrolled devices get onto the
+SLIM node at all, before any SLIM identity token, MLS session or gate check.
+
+* `lab/slim/pki.py`: lab CA (EC P-256, 1 y), node cert (SAN `localhost`, `127.0.0.1`, 30 d) and
+  one client cert per key in `~/.agenttrustsec/keys/` (30 d), **issued over the agent's existing
+  key** (one key = badge + SLIM token + TLS cert), filed by RFC 7638 thumbprint. Everything in
+  `~/.agenttrustsec/pki/` (or `$AGENTTRUSTSEC_PKI`), never the repo; private keys created 0600,
+  never printed. Re-run renews; CA reused unless `--rotate-ca`; keys no longer present lose
+  their cert.
+* Node (`lab/slim/server-config.yaml`, from upstream `config/mtls` @ slim-v3.4.5): TLS source +
+  `client_ca`. Compose mounts only `pki/node/` read-only (node cert/key + CA *cert*; the CA
+  private key is never mounted).
+* `transport/tls.py` + `slim.connect(..., key_pem=)`: `https://` only, TLS 1.3, node verified
+  against the lab CA only (no system pool), client cert for that key. No PKI / not enrolled /
+  cert for another key / `http://` → `NotEnrolled` before the SLIM service is touched. No
+  plaintext fallback. Connections are cached per (endpoint, device key).
+* Negative controls (openssl + slim-bindings, live): plaintext → `h2 protocol error`; TLS without
+  client cert → `tlsv13 alert certificate required`; self-signed foreign cert → `alert unknown ca`;
+  enrolled reader-01 → admitted (TLS 1.3, AES-256-GCM). Rogue `__ephemeral__` device dials anyway
+  without a cert → refused by the node, nothing reaches the gate. Behind it, an untrusted app key
+  riding an enrolled device is still dropped by SLIM identity (defence in depth, both tested).
+* Limits (documented, not solved): the node admits any lab-CA cert per connection and does not
+  bind a cert to a SLIM name (names stay with the SLIM token + gate `peer` check); SLIM 3.4.5
+  shows no CRL support — removing one device = revoke its badge (gate blocks) and re-run
+  `pki.py` without its key, or `--rotate-ca`. Identity Node gRPC stays plaintext on 127.0.0.1
+  (owner's upstream compose holding the issuer DB). P1 probes `lab/slim/*_probe.py` kept as
+  historical (plaintext).
+* Full suite **588 passed** with lab + Ollama up; full `demo_live` 11/11 as expected over mTLS.

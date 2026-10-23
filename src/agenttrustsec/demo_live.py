@@ -171,7 +171,8 @@ class Lab:
     def start_gateway(self) -> None:
         gw = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))["gateway"]["metadata_id"]
         self.start(["-m", "agenttrustsec.mcpgate.serve", "--transport", "slim", "--server-id", gw,
-                    "--audit", str(self.audit("gateway"))], "peer-check=ON", "gateway")
+                    "--audit", str(self.audit("gateway")), "--jti-db", str(self.run_dir / "jti.sqlite3")],
+                   "peer-check=ON", "gateway")
 
     def start_agent(self, module: str, name: str) -> None:
         self.start(["-m", f"agenttrustsec.agents.{module}", "serve", "--audit", str(self.audit(module))],

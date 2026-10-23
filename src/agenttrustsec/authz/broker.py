@@ -9,6 +9,9 @@ The broker also *seals* the user Session at intake. Once a session crosses a pro
 boundary (MCP, SLIM), an agent could otherwise just claim intent=change; a sealed
 session cannot be upgraded by the agent carrying it (T11).
 
+Spent token ids live in a `JtiStore` (authz/replay.py): memory by default, SQLite for the
+gateway so single use survives a restart (item B).
+
 DEV ONLY: HMAC with a shared secret. Later swapped for AGNTCY-issued credentials /
 an RFC 8693 token-exchange service behind the same methods.
 """
@@ -18,11 +21,11 @@ import hashlib
 import hmac
 import json
 import secrets
-import threading
 import time
 from contextvars import ContextVar
 
 from agenttrustsec.identity.badge import _b64, _unb64
+from agenttrustsec.authz.replay import JtiStore, MemoryJtiStore
 from agenttrustsec.models import Intent, Session
 
 # Token for the tool call currently executing; set by the MCP gate on ALLOW only.
@@ -35,14 +38,13 @@ class TokenError(Exception):
 
 class TokenBroker:
     def __init__(self, secret: bytes, issuer: str = "agenttrustsec-broker",
-                 token_ttl_s: int = 60):
+                 token_ttl_s: int = 60, jti_store: JtiStore | None = None):
         if len(secret) < 32:
             raise ValueError("broker secret must be at least 32 bytes")
         self._secret = secret
         self.issuer = issuer
         self.token_ttl_s = token_ttl_s
-        self._redeemed: set[str] = set()
-        self._lock = threading.Lock()
+        self._used = jti_store if jti_store is not None else MemoryJtiStore()
 
     # --- signing primitives ------------------------------------------------
     def _sign(self, claims: dict) -> str:
@@ -71,6 +73,14 @@ class TokenBroker:
         if int(claims.get("exp", 0)) <= int(time.time()):
             raise TokenError(f"{typ} token expired")
         return claims
+
+    def _claim(self, claims: dict, what: str) -> None:
+        """Single use: the store decides atomically; a store error is a TokenError (BLOCK)."""
+        jti = claims.get("jti")
+        if not isinstance(jti, str) or not jti:
+            raise TokenError(f"{what} has no jti")
+        if not self._used.claim(jti, int(claims["exp"])):
+            raise TokenError(f"{what} already used (replay)")
 
     # --- sessions (sealed at intake) ----------------------------------------
     def seal_session(self, session: Session, ttl_s: int = 3600) -> str:
@@ -105,10 +115,7 @@ class TokenBroker:
             raise TokenError(f"token audience {c.get('aud')!r} != {audience!r}")
         if c.get("tool") != tool:
             raise TokenError(f"token scoped to tool {c.get('tool')!r}, not {tool!r}")
-        with self._lock:
-            if c["jti"] in self._redeemed:
-                raise TokenError("token already used (replay)")
-            self._redeemed.add(c["jti"])
+        self._claim(c, "token")
         return c
 
     # --- change approvals (P5d, E3) ------------------------------------------
@@ -133,10 +140,7 @@ class TokenBroker:
             raise TokenError("lines differ from the approved change")
         if c.get("sid") != session_id:
             raise TokenError("approval belongs to a different session")
-        with self._lock:
-            if c["jti"] in self._redeemed:
-                raise TokenError("approval already used (replay)")
-            self._redeemed.add(c["jti"])
+        self._claim(c, "approval")
         return c
 
 

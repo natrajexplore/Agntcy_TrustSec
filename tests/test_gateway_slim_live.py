@@ -50,26 +50,31 @@ def audit_path(tmp_path_factory):
     return tmp_path_factory.mktemp("gw") / "decisions.jsonl"
 
 
-@pytest.fixture(scope="module", autouse=True)
-def gateway(audit_path):
+def start_gateway(audit_path, jti_db):
     proc = subprocess.Popen(
         [sys.executable, "-m", "agenttrustsec.mcpgate.serve", "--transport", "slim",
-         "--server-id", GW, "--audit", str(audit_path)],
+         "--server-id", GW, "--audit", str(audit_path), "--jti-db", str(jti_db)],
         env=ENV, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
         errors="replace")
     deadline = time.time() + 60
     while time.time() < deadline:
         line = proc.stdout.readline()
         if "peer-check=ON" in line:
-            break
+            return proc
         if proc.poll() is not None:
             pytest.fail(f"gateway exited: {line} {proc.stdout.read()[-800:]}")
-    else:
-        proc.kill()
-        pytest.fail("gateway did not come up")
-    yield proc
-    proc.terminate()
-    proc.wait(10)
+    proc.kill()
+    pytest.fail("gateway did not come up")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def gateway(audit_path):
+    """{"proc": the running gateway} — a test may restart it (item B); teardown stops the current one."""
+    gw = {"jti_db": audit_path.parent / "jti.sqlite3"}
+    gw["proc"] = start_gateway(audit_path, gw["jti_db"])
+    yield gw
+    gw["proc"].terminate()
+    gw["proc"].wait(10)
 
 
 def agent(**cfg):
@@ -248,6 +253,28 @@ def test_E3_replayed_approval_is_blocked():
     first, second = r["calls"]
     assert first.get("ok"), r
     assert second.get("blocked_by") == "approval" and "replay" in second["reason"], r
+
+
+def test_B_used_approval_stays_used_across_a_gateway_restart(gateway, audit_path):
+    # item B: spent jtis live in the gateway's SQLite store, not its memory. A captured session +
+    # approval, used once, is replayed against a RESTARTED gateway (same broker key, same store).
+    from agenttrustsec.authz.broker import TokenBroker
+    from agenttrustsec.models import Intent, Session
+    broker = TokenBroker(bytes.fromhex(BROKER_KEY))
+    session = Session(CHANGE_PROMPT, Intent.CHANGE)
+    stolen = {"session": broker.seal_session(session),
+              "approval": broker.mint_approval("CR-LIVE", NO_ANY["device"], NO_ANY["lines"],
+                                               session.session_id, ["reviewer-01"])}
+    exe = dict(key="executor-01", slim_name=slim_name(EXECUTOR), claim=EXECUTOR, badge_id=EXECUTOR,
+               tool="push_config", args=NO_ANY, intent="change", prompt=CHANGE_PROMPT, **stolen)
+    assert agent(**exe).get("ok")
+    gateway["proc"].terminate()
+    gateway["proc"].wait(10)
+    gateway["proc"] = start_gateway(audit_path, gateway["jti_db"])
+    r = agent(**exe)
+    assert r.get("blocked_by") == "approval" and "already used" in r["reason"], r
+    checks = {c["name"]: c["status"] for c in last_audit(audit_path)["checks"]}
+    assert checks == {"badge": "PASS", "peer": "PASS", "tbac": "PASS", "intent": "PASS", "approval": "FAIL"}
 
 
 # --- P5c2/P5d: intake -> attested reviewer group -> approval -> executor -> gateway ----------

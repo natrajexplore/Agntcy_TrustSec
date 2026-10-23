@@ -162,8 +162,25 @@ any/any → REJECT, score 100 (fail-safe).
   an approval for other lines / replaying a used one → `approval` BLOCK; reader-01 dispatching to
   the executor → `caller` BLOCK. Full suite 465 passed with the lab up.
 * **Known limits:** (1) ~~nothing proves the lines *implement* the reviewed request~~ —
-  resolved by item A (§5g). (2) Redeemed jtis live in the gateway's
-  memory; a restart forgets them (15 min ttl limits the window). (3) One reviewer in the lab pool.
+  resolved by item A (§5g). (2) ~~redeemed jtis live in the gateway's memory~~ — resolved by
+  item B (§5h). (3) One reviewer in the lab pool.
+
+## 5h. Item B as built (2026-10-23) — spent tokens survive a restart (owner: SQLite, defaults)
+
+* `authz/replay.py`: `claim(jti, exp) -> bool`, first claim wins. `MemoryJtiStore` (unit tests,
+  offline demo) and `SqliteJtiStore` (stdlib `sqlite3`, no new dependency): the `jti` PRIMARY KEY
+  makes a claim atomic, also between processes sharing the file; rows are purged once expired
+  (the broker refuses an expired token before asking). Store unavailable / corrupt →
+  `ReplayStoreError` → gate `approval` ERROR → BLOCK; the gateway refuses to start without it.
+* `TokenBroker(..., jti_store=)`: approvals AND external-data access tokens go through the store;
+  a token without a jti is refused. The memory store also no longer grows without bound.
+* `serve.py --jti-db` (default `~/.agenttrustsec/state/jti.sqlite3`, outside the repo next to the
+  keys). `demo_live` and the live tests use a per-run file.
+* Why it mattered: with a stable broker key (lab, demo), a used approval replayed against a
+  RESTARTED gateway was accepted. Negative control: the new live test with the gateway on the
+  memory store fails — the replay pushed again. With SQLite: `approval` FAIL "already used".
+  TrustSec analogy: ISE's session table on disk instead of only in RAM.
+* Full suite **557 passed** with lab + Ollama up.
 
 ## 5g. Item A as built (2026-10-23) — change request → config (owner: jinja2)
 

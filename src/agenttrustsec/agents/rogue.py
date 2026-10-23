@@ -66,7 +66,8 @@ async def gateway_call(cfg: dict) -> dict:
     """cfg: key (name in the key dir or "__ephemeral__"), slim_name, sub (token subject, default
     slim_name), claim (agent id claimed in _meta), badge_id (whose badge to copy) or badge_jose,
     tool, args, intent, prompt, gateway_id, approve (mint an approval for args), approve_lines
-    (approve OTHER lines), repeat (call N times with the same approval)."""
+    (approve OTHER lines), repeat (call N times with the same approval), session + approval
+    (captured tokens, replayed verbatim)."""
     from mcp import Client
 
     from agenttrustsec.agents.runtime import IDENTITIES
@@ -84,8 +85,8 @@ async def gateway_call(cfg: dict) -> dict:
     badge = cfg.get("badge_jose") or current_badge(cfg["badge_id"])
     broker = _broker()
     session = Session(cfg.get("prompt", "Audit the ACLs on edge-fw-01"), Intent(cfg.get("intent", "read")))
-    token = broker.seal_session(session)
-    approval = None
+    token = cfg.get("session") or broker.seal_session(session)
+    approval = cfg.get("approval")
     if cfg.get("approve"):
         a = cfg.get("args", {})
         approval = broker.mint_approval("CR-LIVE", a["device"], cfg.get("approve_lines", a["lines"]),

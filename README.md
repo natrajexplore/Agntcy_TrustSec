@@ -295,6 +295,7 @@ src/agenttrustsec/
   authz/peer.py          peer check: transport identity must hold the badge-bound key
   authz/gate.py          badge → peer → TBAC → intent → [approval] → ALLOW/BLOCK + audit
   authz/broker.py        sealed sessions; single-use scoped tokens and change approvals
+  authz/replay.py        spent-token store (SQLite): single use survives a gateway restart
   mcpgate/               gate as MCP middleware, agent-side client, gateway runner
   transport/slim.py      MCP over SLIM (MLS P2P); reports and pins the peer
   transport/slim_group.py  attested MLS group sessions (reviewer pool)
@@ -325,6 +326,7 @@ tests/                   unit tests + live tests against the lab
 | P5 | Real agents: intake, reader, RuleGate PAN-OS / FTD reviewer group, executor with approval tokens, rogue; live demo | ✅ |
 | P6 | Per-check timing + benchmarks, decisions dashboard, README diagrams | ✅ (node admission control moved to the backlog) |
 | A | Change request → config: pushed lines rendered from the reviewed CR, cross-checked by reviewers | ✅ |
+| B | Spent approvals / tokens persisted (SQLite): no replay after a gateway restart | ✅ |
 
 ## Built on
 

@@ -17,7 +17,9 @@ model = refuse to start.
 
 Agents are verified as AGNTCY badges against `policies/identities.yaml`. Sessions are
 sealed by the broker; AGENTTRUSTSEC_BROKER_KEY (hex, >= 32 bytes) shares its key with the
-lab intake stand-in, otherwise it is per-process (intake wiring is P5).
+lab intake stand-in, otherwise it is per-process (intake wiring is P5). Spent token ids
+(approvals, access tokens) go to a SQLite store (--jti-db, item B) so single use survives a
+restart; the store unavailable = refuse to start, and a store error later = BLOCK.
 """
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ from agenttrustsec.authz.broker import TokenBroker
 from agenttrustsec.authz.gate import Gate
 from agenttrustsec.authz.intent import BaselineIntentChecker
 from agenttrustsec.authz.peer import PeerBinding, slim_name
+from agenttrustsec.authz.replay import DEFAULT_DB, JtiStore, ReplayStoreError, SqliteJtiStore
 from agenttrustsec.authz.tbac import TbacPolicy
 from agenttrustsec.identity.agntcy import (
     MCP_SERVER_BADGE, AgntcyBadgeVerifier, load_key_thumbprints, load_role_map,
@@ -89,14 +92,14 @@ def check_own_key(pem: str, server_id: str, trust: list[dict[str, str]]) -> str:
     return thumb
 
 
-def broker_from_env() -> TokenBroker:
+def broker_from_env(jti_store: JtiStore | None = None) -> TokenBroker:
     hexkey = os.environ.get("AGENTTRUSTSEC_BROKER_KEY")
     if not hexkey:
-        return TokenBroker(secrets.token_bytes(32))
+        return TokenBroker(secrets.token_bytes(32), jti_store=jti_store)
     key = bytes.fromhex(hexkey)
     if len(key) < 32:
         raise ValueError("AGENTTRUSTSEC_BROKER_KEY must be >= 32 bytes (64 hex chars)")
-    return TokenBroker(key)
+    return TokenBroker(key, jti_store=jti_store)
 
 
 def make_gate(audit_path: Path, peer: PeerBinding | None, semantic=None,
@@ -133,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--key", type=Path, help="private key PEM (default ~/.agenttrustsec/keys/<name>.pem)")
     ap.add_argument("--trust-jwks", type=Path, default=TRUST_JWKS)
     ap.add_argument("--audit", type=Path, default=ROOT / "audit" / "decisions.jsonl")
+    ap.add_argument("--jti-db", type=Path, default=DEFAULT_DB, help="spent-token store (SQLite)")
     args = ap.parse_args(argv)
 
     if args.transport == "http":
@@ -143,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--transport slim requires --server-id")
     try:
         return asyncio.run(_serve_slim(args))
-    except (BadgeError, LlmUnavailable) as e:
+    except (BadgeError, LlmUnavailable, ReplayStoreError) as e:
         print(f"{args.name}: REFUSING TO START: {e}", file=sys.stderr, flush=True)
         return 2
 
@@ -153,7 +157,7 @@ def _registry(broker: TokenBroker) -> dict:
 
 
 def _serve_http(args: argparse.Namespace) -> int:
-    broker = broker_from_env()
+    broker = broker_from_env(SqliteJtiStore(args.jti_db))
     server = build_server(args.name, make_gate(args.audit, None), broker, None, _registry(broker))
     print(f"{args.name}: http://127.0.0.1:{args.port}/mcp  badge=NONE "
           f"(issuance mode, tools/call BLOCKED)", flush=True)
@@ -169,14 +173,14 @@ async def _serve_slim(args: argparse.Namespace) -> int:
     pem = (args.key or KEY_DIR / f"{args.name}.pem").read_text()
     thumb = check_own_key(pem, args.server_id, trust)
     badge = fetch_server_badge(args.node, args.server_id)
-    broker = broker_from_env()
+    broker = broker_from_env(SqliteJtiStore(args.jti_db))
     llm, llm_model = local_llm_matcher()
     gate = make_gate(args.audit, PeerBinding(trust), semantic=llm, approvals=broker)
     server = build_server(args.name, gate, broker, badge, _registry(broker))
     name = slim_name(args.server_id)
     endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), args.slim)
     print(f"{args.name}: slim {name} via {args.slim}  badge=verified {args.server_id}  "
-          f"key={thumb}  peer-check=ON  change-tools-llm={llm_model}", flush=True)
+          f"key={thumb}  jti-db={args.jti_db}  peer-check=ON  change-tools-llm={llm_model}", flush=True)
     await slim.serve_slim(server, endpoint)
     return 0
 

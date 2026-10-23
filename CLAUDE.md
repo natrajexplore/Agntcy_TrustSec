@@ -55,6 +55,7 @@ src/agenttrustsec/
   authz/gate.py        # Combines badge + [peer] + TBAC + intent + [approval] → ALLOW/BLOCK, writes audit
   authz/peer.py        # P3: transport identity must hold the key the badge binds
   authz/broker.py      # Seals sessions; mints single-use access + change-approval tokens
+  authz/replay.py      # Spent-token store (SQLite for the gateway): single use survives a restart
   mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
   mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
   mcpgate/serve.py     # Gateway runner: SLIM for tool calls (peer check ON); HTTP = issuance only

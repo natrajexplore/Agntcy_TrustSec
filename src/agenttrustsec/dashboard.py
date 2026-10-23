@@ -9,6 +9,7 @@ every check with its reason and time.
     python -m agenttrustsec.dashboard                       # latest audit/demo-*/ -> its dashboard.html
     python -m agenttrustsec.dashboard audit/demo-XXXX -o out.html
     python -m agenttrustsec.dashboard --serve [--port 8765] # live: re-reads the trails every 2 s
+                                                            # + /control = Control Center (controlcenter.py)
 
 --serve binds 127.0.0.1 only (stdlib http.server). Audit text is rendered as text, never HTML;
 the audit never holds tokens or raw badges (models.Decision.to_audit_record).
@@ -16,8 +17,11 @@ the audit never holds tokens or raw badges (models.Decision.to_audit_record).
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
+import secrets
 import sys
+import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -84,22 +88,77 @@ def render(data: dict[str, Any], live: bool = False) -> str:
     return PAGE.replace("/*DATA*/", payload)
 
 
-def make_server(run_dir: Path, port: int) -> ThreadingHTTPServer:
-    """Live dashboard server, 127.0.0.1 only: / = page, /data.json = fresh data."""
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; "
+       "img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+
+
+def make_server(run_dir: Path, port: int, probe=None) -> ThreadingHTTPServer:
+    """Live server, 127.0.0.1 only: / = decisions page, /data.json = fresh data, /control = Control
+    Center, /control.json = its view, POST /control/run = read-only probes (controlcenter.py).
+
+    Hardening (a web page in your browser must not drive or read this server): every request needs
+    Host = 127.0.0.1 / localhost on this port (DNS rebinding); POST also needs a matching Origin and
+    the per-launch random token embedded in the Control Center page (CSRF); no CORS; one probe run
+    at a time; strict CSP, no framing. `probe` is injectable for tests."""
+    from agenttrustsec import controlcenter
+    token = secrets.token_urlsafe(32)
+    state: dict[str, Any] = {"last": None}
+    lock = threading.Lock()
+    probe = probe or controlcenter.probe_in_child
+
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802 - http.server API
-            if self.path in ("/", "/index.html"):
-                body, kind = render(collect(run_dir), live=True).encode(), "text/html; charset=utf-8"
-            elif self.path == "/data.json":
-                body, kind = json.dumps(collect(run_dir)).encode(), "application/json"
-            else:
-                self.send_error(404)
-                return
-            self.send_response(200)
+        def _origins(self) -> set[str]:
+            p = self.server.server_address[1]
+            return {f"127.0.0.1:{p}", f"localhost:{p}"}
+
+        def _send(self, code: int, body: bytes, kind: str) -> None:
+            self.send_response(code)
             self.send_header("Content-Type", kind)
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Security-Policy", CSP)
             self.end_headers()
             self.wfile.write(body)
+
+        def _refuse(self, code: int, why: str) -> None:
+            self._send(code, json.dumps({"error": why}).encode(), "application/json")
+
+        def _cc_view(self) -> dict[str, Any]:
+            data = collect(run_dir) if run_dir.exists() else None
+            return controlcenter.view(data, state["last"])
+
+        def do_GET(self):  # noqa: N802 - http.server API
+            if self.headers.get("Host") not in self._origins():
+                return self._refuse(403, "bad Host")
+            if self.path in ("/", "/index.html"):
+                self._send(200, render(collect(run_dir), live=True).encode(), "text/html; charset=utf-8")
+            elif self.path == "/data.json":
+                self._send(200, json.dumps(collect(run_dir)).encode(), "application/json")
+            elif self.path == "/control":
+                self._send(200, controlcenter.render_page(self._cc_view(), token).encode(), "text/html; charset=utf-8")
+            elif self.path == "/control.json":
+                self._send(200, json.dumps(self._cc_view()).encode(), "application/json")
+            else:
+                self._refuse(404, "not found")
+
+        def do_POST(self):  # noqa: N802 - http.server API
+            if self.path != "/control/run":
+                return self._refuse(404, "not found")
+            origin = self.headers.get("Origin") or ""
+            if (self.headers.get("Host") not in self._origins()
+                    or origin.removeprefix("http://") not in self._origins() or not origin.startswith("http://")):
+                return self._refuse(403, "bad Host or Origin")
+            if not hmac.compare_digest(self.headers.get("X-AgentTrustSec-Token") or "", token):
+                return self._refuse(403, "bad token")
+            if not lock.acquire(blocking=False):
+                return self._refuse(409, "a probe run is already in progress")
+            try:
+                state["last"] = probe()
+            finally:
+                lock.release()
+            self._send(200, json.dumps(self._cc_view()).encode(), "application/json")
 
         def log_message(self, *a):  # quiet
             pass
@@ -109,7 +168,8 @@ def make_server(run_dir: Path, port: int) -> ThreadingHTTPServer:
 
 def serve(run_dir: Path, port: int) -> None:
     httpd = make_server(run_dir, port)
-    print(f"dashboard for {run_dir} at http://127.0.0.1:{port}/  (Ctrl+C to stop)", flush=True)
+    print(f"dashboard for {run_dir} at http://127.0.0.1:{port}/  ·  Control Center at "
+          f"http://127.0.0.1:{port}/control  (Ctrl+C to stop)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -220,6 +280,9 @@ tr.x td { background: var(--wash); }
     <h1>AgentTrustSec decisions</h1>
     <span class="sub" id="meta"></span>
     <span style="flex:1"></span>
+    <nav id="nav" aria-label="Views" hidden style="gap:6px"><a href="./" aria-current="page"
+      style="color:var(--ink);text-decoration:none;border:1px solid var(--ink-2);border-radius:6px;padding:5px 10px;font-size:13px;font-weight:600">Decisions</a><a href="control"
+      style="color:var(--ink-2);text-decoration:none;border:1px solid var(--axis);border-radius:6px;padding:5px 10px;font-size:13px">Control Center</a></nav>
     <button id="theme" type="button" aria-label="Toggle light or dark theme">Theme</button>
   </header>
   <section class="tiles" id="tiles"></section>
@@ -443,6 +506,7 @@ tr.x td { background: var(--wash); }
     root.dataset.theme = dark ? "light" : "dark";
   });
   renderAll();
+  if (DATA.live) { const nav = $("nav"); nav.hidden = false; nav.style.display = "flex"; }   // /control exists only when served
   if (DATA.live) setInterval(() => {
     fetch("data.json", {cache: "no-store"}).then((r) => r.json()).then((d) => { DATA = {...d, live: true}; renderAll(); })
       .catch(() => {});

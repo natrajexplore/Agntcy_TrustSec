@@ -16,20 +16,25 @@ explicitly allowed is blocked, and every decision is audited.
 > **Lab project.** Network tools are mocks or lab devices — never production. Independent work;
 > see the [disclaimer](#disclaimer).
 
+![Control Center: every security layer verified with live evidence](docs/images/control-center.png)
+<sub>The [Control Center](#control-center) on the live lab: 11 enforcement layers plus audit, each
+verified by real audit records, the demo's expected-vs-actual result and read-only probes.</sub>
+
 | At a glance | |
 |---|---|
 | Checks on every tool call | 5 — badge, peer (key possession), TBAC, intent, approval — plus node admission before any of them |
 | Live attacks blocked | every one in the [attack matrix](#attack-matrix), against the real gateway process |
-| Tests | 588 with the lab up · 534 in CI (live-lab tests skip; a guard makes sure only those do) |
+| Tests | 619 with the lab up · 564 in CI (live-lab tests skip; a guard makes sure only those do) |
 | Cost of enforcement | ~0.1 ms gate logic · 26 ms p50 for a read end to end · 4.5 s for a new change (local LLM) |
 | External services | none paid — local Ollama model, local AGNTCY Identity Node, local SLIM node |
+| See it working | [Control Center](#control-center) — `http://127.0.0.1:8765/control`, 12 / 12 layers verified on the live lab |
 
 ## Contents
 
 - [Why](#why) · [The mental model](#the-mental-model-trustsec--agntcy) · [Architecture](#architecture)
 - [Defence in depth](#defence-in-depth) · [How a change flows](#how-a-change-flows) · [How a tool call is decided](#how-a-tool-call-is-decided)
 - [Findings](#what-building-it-has-proven) · [Attack matrix](#attack-matrix)
-- [Getting started](#getting-started) · [Configuration](#configuration) · [Live demo and dashboard](#live-demo-and-dashboard)
+- [Getting started](#getting-started) · [Configuration](#configuration) · [Live demo and dashboard](#live-demo-and-dashboard) · [Control Center](#control-center)
 - [Operations runbook](#operations-runbook) · [Testing and CI](#testing-and-ci) · [Known limitations](#known-limitations)
 - [Repository layout](#repository-layout) · [Documentation](#documentation) · [Roadmap](#roadmap)
 - [Contributing](#contributing) · [Security](#security) · [Built on](#built-on) · [Disclaimer](#disclaimer) · [License](#license)
@@ -346,10 +351,48 @@ python -m agenttrustsec.dashboard                 # latest demo run -> audit/dem
 python -m agenttrustsec.dashboard --serve         # live view on http://127.0.0.1:8765 (localhost only)
 ```
 
+![Decisions dashboard: totals, blocks by check, decision times and the demo story](docs/images/decisions-dashboard.png)
+
 One self-contained HTML page (no CDN): totals, blocks per check, a decision-time histogram, the
 demo's expected-vs-actual table, and an ISE Live Logs-style table across every audit trail —
 filter by source, agent, tool, verdict or blocking check; click a row for every check with its
-reason and time. `*` marks a claimed identity that was never verified.
+reason and time. `*` marks a claimed identity that was never verified. With `--serve`, a tab bar
+switches between **Decisions** and the **[Control Center](#control-center)**.
+
+## Control Center
+
+**Is every security control working right now?** One page answers it, layer by layer, with
+evidence — never with a green light by default.
+
+```bash
+python -m agenttrustsec.dashboard --serve           # http://127.0.0.1:8765/control
+python -m agenttrustsec.controlcenter status        # the same view in the terminal (exit 1 if anything fails)
+```
+
+| Part | What it shows |
+|---|---|
+| **Layer cards** (11 + audit) | status, TrustSec analogy, what the layer stops, where it lives, the tests that pin it |
+| **Evidence** | the latest live demo's real audit records (e.g. the `peer` BLOCK of a copied badge), that demo's expected-vs-actual result, and probe results |
+| **Run checks** | 8 read-only probes, ~10 s: plaintext + unenrolled device refused / enrolled admitted · untrusted app key dropped · revoked badge and its replayed copy rejected · unknown tool and wrong role blocked · change tool in a read session blocked · replay refused after a restart (temp store) · tampered config lines rejected · gateway badge signs exactly the served tools |
+| **Health** | SLIM node, Identity Node, Ollama (pinned digest), node + CA certificate expiry, mTLS enrolment of every agent, CA private key kept out of the node mount, latest demo result |
+
+**Deny by default, in the UI too.** A layer is *Verified* only when every piece of its evidence is
+present and good; missing evidence is *Not verified*, anything contradicting it is *Failing*.
+Before any probe run, only the four layers the demo alone proves are green. Probes only observe —
+they never change lab state — and run in a child process with a timeout; a probe error is a
+failure, never a pass.
+
+**The local server is hardened** so a web page in your browser can neither drive nor read it:
+bound to 127.0.0.1; every request needs `Host` = `127.0.0.1` / `localhost` on that port (DNS
+rebinding); **Run checks** is a POST that needs a matching `Origin` and a random per-launch token
+embedded in the page (CSRF); one run at a time; no CORS; strict CSP, `X-Frame-Options: DENY`,
+`nosniff`, `no-referrer`. All audit text is rendered as text, never HTML. Launching the attack demo
+is deliberately not in the UI — it stays `python -m agenttrustsec.demo_live`.
+
+**Design.** A navy, enterprise-style UI (light theme one click away, remembered per viewer), with
+every text / background pair contrast-checked to WCAG AA in both themes and status always shown as
+icon + label, never colour alone. It works down to phone width. The look is inspired by
+cisco.com's visual language; no Cisco logo, name or proprietary font is used.
 
 ### What it costs ([`eval/results/p6a-latency.md`](eval/results/p6a-latency.md))
 
@@ -371,14 +414,15 @@ record (`elapsed_ms`). Reproduce with `python eval/bench.py live --write`.
 | Rotate the lab CA | `python lab/slim/pki.py --rotate-ca`, restart the node — every old cert stops working |
 | A gateway tool's name, description or arguments changed | the gateway refuses to start (drift); re-issue its badge and revoke the stale one — [`docs/notes-p1.md`](docs/notes-p1.md) §10 |
 | Revoke an agent | `python lab/identity/revoke_badge.py <metadata id> [--vc-id <id>]` (dry run without `--yes`; irreversible) |
-| Inspect what happened | `python -m agenttrustsec.dashboard <audit dir> --serve` |
+| Inspect what happened | `python -m agenttrustsec.dashboard <audit dir> --serve` (Decisions + Control Center) |
+| Check every control in one go | `python -m agenttrustsec.controlcenter status` or **Run checks** at `/control` |
 
 ## Testing and CI
 
 | Tier | What | Where it runs |
 |---|---|---|
-| Unit | gate, policies, broker, replay store, renderer (byte-identical to RuleGate), inventory drift, PKI, ported RuleGate suite | everywhere — 534 tests |
-| Live | real Identity Node, SLIM node over mTLS, real badges and keys, local LLM, end-to-end demo | your lab — 588 tests total, skip themselves otherwise |
+| Unit | gate, policies, broker, replay store, renderer (byte-identical to RuleGate), inventory drift, PKI, Control Center + its server hardening, ported RuleGate suite | everywhere — 564 tests |
+| Live | real Identity Node, SLIM node over mTLS, real badges and keys, local LLM, end-to-end demo, every Control Center probe | your lab — 619 tests total, skip themselves otherwise |
 
 [GitHub Actions](.github/workflows/ci.yml) runs on every pull request and every push to `main`:
 
@@ -437,7 +481,8 @@ src/agenttrustsec/
   audit/log.py           JSONL audit writer
   tools/                 mock network tools and a mock external API
   demo.py  demo_live.py  offline scenario demo; end-to-end demo on the live lab
-  dashboard.py           self-contained decisions dashboard (+ --serve on localhost)
+  dashboard.py           self-contained decisions dashboard (+ --serve on localhost, hardened)
+  controlcenter.py       Control Center: per-layer status from evidence + read-only probes
 policies/                tbac.yaml, identities.yaml, groups.yaml, trust-jwks.json (public keys)
 lab/                     Identity Node + SLIM compose, PKI, key/revoke tools, agents.yaml,
                          changes/ (lab change orders), historical P1 probes
@@ -474,6 +519,7 @@ tests/                   unit tests + live tests against the lab
 | C | Tool-inventory drift check; agents trust only signed tools; gateway badge re-issued | ✅ |
 | E | mTLS node admission: only enrolled devices reach the SLIM node; TLS 1.3 hop | ✅ |
 | F | CI (tests on 3.10–3.12, skip guard, gitleaks) + branch protection | ✅ |
+| UI | Control Center (per-layer status from evidence, read-only probes) + navy enterprise restyle | ✅ |
 | Next | Keys at rest, second reviewer, badge expiry policy, role-filtered `tools/list` | candidates |
 
 ## Contributing

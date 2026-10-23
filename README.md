@@ -60,32 +60,96 @@ Design principles (non-negotiable, see `CLAUDE.md`):
 | Per-session dACL | Broker-minted, single-use token scoped to one tool + audience |
 | ISE Live Logs | `audit/decisions.jsonl` |
 
+## Architecture
+
+```mermaid
+flowchart LR
+    eng(["Engineer"]) -->|request| intake
+
+    subgraph agents["Agents (each: own key + AGNTCY badge, dial OUT, no inbound port)"]
+        intake["intake-01<br/>seals intent, plans,<br/>mints approvals"]
+        reader["reader-01"]
+        reviewer["reviewer-01"]
+        executor["executor-01"]
+    end
+    rogue{{"rogue / impostor"}}
+
+    slim[("SLIM node<br/>forwards MLS ciphertext")]
+
+    subgraph gw["MCP gateway netops-mcp"]
+        gate["Gate<br/>badge, peer, tbac,<br/>intent, approval"]
+        tools["show_* / review_change (RuleGate)<br/>push_config to lab mocks"]
+        gate -->|ALLOW only| tools
+    end
+
+    idn[("AGNTCY Identity Node<br/>badges + revocation")]
+    llm[("Ollama qwen2.5:7b<br/>local, change tools only")]
+    audit[("audit/*.jsonl<br/>-> dashboard")]
+
+    intake -. "jobs (caller gate)" .-> reader
+    intake -. "jobs (caller gate)" .-> executor
+    intake <-. "attested MLS group" .-> reviewer
+    reader --> slim
+    reviewer --> slim
+    executor --> slim
+    rogue -. blocked .-> slim
+    slim --> gate
+    gate --> idn
+    gate --> llm
+    gate --> audit
+```
+
+TrustSec reading: badges are the machine certs, `policies/identities.yaml` assigns the SGT
+(role), `policies/tbac.yaml` is the SGACL matrix, SLIM + MLS is the MACsec fabric, the gate is
+the enforcement point, and the audit trail is ISE Live Logs.
+
+## How a change flows
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor E as Engineer
+    participant I as intake-01
+    participant R as reviewer-01
+    participant X as executor-01
+    participant G as Gateway (Gate)
+    E->>I: "Add a rule on edge-fw-01 ... (CR-1001)" + change file
+    I->>I: intent = change, seal session, build proposal (device, exact lines, CR)
+    I->>R: invite to MLS group, moderator hello (badge)
+    R->>R: verify intake: badge, key, moderator role
+    R->>I: attest (badge) - admitted only if badge + key + group policy pass
+    I->>R: broadcast proposal + sealed READ session for the review
+    R->>G: review_change(device, CR)
+    G-->>R: RuleGate verdict (badge, peer, tbac, intent checked + audited)
+    R->>I: reply: approve only if APPROVE, no human review, same lines digest
+    alt every admitted reviewer approved
+        I->>I: mint single-use approval (change id + device + lines + session)
+        I->>X: run_change(device, lines, session, approval) - caller gate: intake only
+        X->>G: push_config(device, lines) + approval
+        G-->>X: ALLOW after badge, peer, tbac, intent (scope + local LLM), approval
+    else any reject, missing reply or no reviewer admitted
+        I-->>E: not approved - nothing is pushed
+    end
+```
+
 ## How a tool call is decided
 
-```
- Engineer ─► Intake (seals intent) ─┬─► Reader   ─┐
-                                    ├─► Reviewer ─┼──► MCP gateway ──► show_* / review_change
-                                    └─► Executor ─┘    (Gate inside)    push_config (CHANGE)
-                 Rogue / impostor ─────────X
- All agent ↔ gateway traffic: SLIM, MLS-encrypted; agents and gateway dial OUT
- (no inbound ports). The SLIM node forwards ciphertext.
-
- Gate, for every tools/call:
-   [1]  badge   AGNTCY badge verifies on the Identity Node, is published + not revoked,
-                subject == claimed agent            → verified role + bound key
-   [1b] peer    SLIM token sub == SLIM subject == routing name == badge holder,
-                and the token verifies with the badge-bound key   (proof of possession)
-   [2]  tbac    role allowed for this tool                         (SGACL)
-   [3]  intent  target (device/IP) named in the request (scope); change tools need a
-                `change` session + a local-LLM verdict; reads need keyword relevance
-   [4]  approval  push_config only: single-use reviewer approval bound to change id +
-                device + exact lines + session                     (CoA after posture)
-   ALL pass → ALLOW (+ scoped token for external APIs)   else BLOCK
-   → exactly one audit record (peer identity included, tokens never)
+```mermaid
+flowchart LR
+    call(["tools/call<br/>over SLIM"]) --> badge["1 badge<br/>verifies on the Identity Node,<br/>published + not revoked"]
+    badge -->|PASS| peer["2 peer<br/>SLIM token signed by<br/>the key the badge binds"]
+    peer -->|PASS| tbac["3 tbac<br/>role may use<br/>this tool"]
+    tbac -->|PASS| intent["4 intent<br/>target named in request;<br/>change tool: change session<br/>+ local-LLM verdict"]
+    intent -->|PASS| approval["5 approval<br/>push_config only: single use,<br/>same device + lines + session"]
+    approval -->|"PASS or not required"| allow(["ALLOW"])
+    badge & peer & tbac & intent & approval -->|"FAIL / ERROR"| block(["BLOCK"])
+    allow & block --> rec[("one audit record: every<br/>check, its reason and time")]
 ```
 
-The agent side mirrors it: a result counts only if the gateway's badge verifies **and**
-the gateway proves it holds the key bound to that badge.
+Any error inside a check is a BLOCK, and checks after a failure are skipped (an approval is
+never consumed by a call that fails earlier). The agent side mirrors the gate: a result counts
+only if the gateway's badge verifies **and** the gateway proves it holds the key bound to that
+badge.
 
 ## What building it has proven so far
 
@@ -257,7 +321,7 @@ tests/                   unit tests + live tests against the lab
 | P3 | SLIM transport with key-bound identity | ✅ keys, adapter, peer check, gateway on SLIM, attested reviewer groups |
 | P4 | Intent: scope check + local LLM verifier for change tools, evaluated on ASTRA | ✅ |
 | P5 | Real agents: intake, reader, RuleGate PAN-OS / FTD reviewer group, executor with approval tokens, rogue; live demo | ✅ |
-| P6 | Live decisions dashboard, latency and block-rate benchmarks, node admission control | ⏳ |
+| P6 | Per-check timing + benchmarks, decisions dashboard, README diagrams | ✅ (node admission control moved to the backlog) |
 
 ## Built on
 

@@ -126,12 +126,13 @@ tests/                 # pytest — must stay green
       (`python -m agenttrustsec.demo_live [--quick]`: all 7 rogue attacks blocked, both changes as
       expected; peak 14.2 GB of 15.5 GB with the model loaded). Real agents: intake, reader (pyATS / mock), reviewer (port the
       CrewAI Palo Alto / FTD change reviewer), executor. Add the rogue agent.
-- [ ] **P6 Observe & benchmark** — plan approved: P6a timing + benchmarks, P6b self-contained HTML
+- [x] **P6 Observe & benchmark** — plan approved: P6a timing + benchmarks, P6b self-contained HTML
       dashboard (+ optional `--serve`), P6c Mermaid README diagrams. P6a done: per-check +
       decision `elapsed_ms` in the audit, `eval/bench.py` (offline / live), results in
       `eval/results/p6a-latency.md` (read 26 ms, new change 4.5 s = LLM, gate logic ~0.1 ms).
       P6b done: `dashboard.py` (self-contained HTML from an audit dir, `--serve` = 127.0.0.1 live).
-      Next: P6c README diagrams. Dashboard of ALLOW/BLOCK decisions; latency and
+      P6c done: Mermaid architecture / change-flow / gate diagrams in README.md (rendered with
+      mermaid 10.9.1 to check). Node admission control -> backlog. Dashboard of ALLOW/BLOCK decisions; latency and
       block-rate numbers (optionally via `outshift-open/mas-lab`); README diagrams.
 
 ## Commands

@@ -7,3 +7,5 @@ __pycache__/
 .pytest_cache/
 # ASTRA dataset clone (pinned commit, see eval/README.md) — not ours to commit
 /eval/.astra/
+# resumable eval checkpoints (local runs)
+/eval/.runs/

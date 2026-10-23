@@ -4,6 +4,8 @@
     git -C eval/.astra checkout ee05b9b6e6c1c91688db45b187da68f6b2ecb8e7      # pinned
     python eval/astra_eval.py --matcher lexical --split test --tools 01_tool 03_tools
     python eval/astra_eval.py --matcher llm --limit 20     # local Ollama (free, ~6.5 s/check)
+    python eval/astra_eval.py --matcher llm-catalog --limit 200 --checkpoint eval/.runs/cat.jsonl --batch 50
+        # resumable: each verdict is saved as it is made; re-run the same command to continue
 
 Schema verified on that commit (2026-10-23): a record is
   {"input": {"task", "tools": [...], "mcp_servers": [...]},
@@ -17,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -84,6 +87,50 @@ def report_usage(matcher) -> None:
           f"tokens (no API, no cost)")
 
 
+class BatchDone(Exception):
+    """This run made its --batch quota of model calls; re-run to continue."""
+
+
+def load_checkpoint(path: Path) -> dict:
+    done = {}
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                done[(r["id"], r["tool"])] = r
+    return done
+
+
+def run_checkpointed(matcher, cases: list[Case], path: Path, batch: int = 0):
+    """Resume-safe evaluation. Returns (outcomes or None if unfinished, checks done, total).
+    Verdicts are appended to `path` immediately. A matcher exception is NOT saved (it is an
+    infrastructure failure, not a verdict): the run stops and that check is retried next time."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    done = load_checkpoint(path)
+    total = sum(len(c.tools) for c in cases)
+    calls = 0
+    with path.open("a", encoding="utf-8") as f:
+        for c in cases:
+            for tool in c.tools:
+                if (c.id, tool.name) in done:
+                    continue
+                if batch and calls >= batch:
+                    return None, len(done), total
+                t0 = time.perf_counter()
+                r = matcher.match(c.task, tool, c.server_tools.get(tool.server, ()))
+                rec = {"id": c.id, "tool": tool.name, "allow": r.allow, "reason": r.reason,
+                       "ms": (time.perf_counter() - t0) * 1000}
+                f.write(json.dumps(rec) + "\n")
+                f.flush()
+                done[(c.id, tool.name)] = rec
+                calls += 1
+    outcomes = run(lambda case, tool: (done[(case.id, tool.name)]["allow"],
+                                       done[(case.id, tool.name)]["reason"]), cases)
+    for o in outcomes:                       # replace lookup timing with the recorded model latency
+        o.latency_ms[:] = [done[(o.case.id, t.name)]["ms"] for t in o.case.tools]
+    return outcomes, len(done), total
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--astra", type=Path, default=DEFAULT_ROOT)
@@ -91,7 +138,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--split", default="validation", choices=["validation", "test"])
     ap.add_argument("--matcher", default="lexical", choices=sorted(MATCHERS))
     ap.add_argument("--limit", type=int, default=0, help="stratified sample size per --tools set")
+    ap.add_argument("--checkpoint", type=Path, help="JSONL file: save each verdict, resume on re-run")
+    ap.add_argument("--batch", type=int, default=0, help="with --checkpoint: max new model calls this run")
     args = ap.parse_args(argv)
+    if args.batch and not args.checkpoint:
+        ap.error("--batch needs --checkpoint")
+    if args.checkpoint and len(args.tools) != 1:
+        ap.error("--checkpoint takes one --tools set per file")
     matcher = MATCHERS[args.matcher]()
 
     def decide(case, tool):
@@ -102,7 +155,15 @@ def main(argv: list[str] | None = None) -> int:
     print(TABLE_HEADER)
     for tools in args.tools:
         cases = stratified(load_cases(args.astra, tools, args.split), args.limit)
-        m = metrics(run(decide, cases))
+        if args.checkpoint:
+            outcomes, n_done, n_total = run_checkpointed(matcher, cases, args.checkpoint, args.batch)
+            if outcomes is None:
+                print(f"| (partial) {args.matcher} · {tools} | {n_done}/{n_total} checks saved to "
+                      f"{args.checkpoint} — re-run to continue | | | | | | | |")
+                continue
+            m = metrics(outcomes)
+        else:
+            m = metrics(run(decide, cases))
         print(markdown_row(f"{args.matcher} · {tools}" + (f" (n={len(cases)})" if args.limit else ""), m))
     report_usage(matcher)
     return 0

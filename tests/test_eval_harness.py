@@ -117,3 +117,41 @@ def test_stratified_sample_keeps_label_mix():
     s = astra_eval.stratified(cases, 20)
     assert [sum(c.label == lab for c in s) for lab in ("correct", "wrong", "null")] == [10, 8, 2]
     assert astra_eval.stratified(cases, 0) is cases
+
+
+# --- resumable runs (checkpoint + batch) -------------------------------------------------
+
+class CountingMatcher:
+    def __init__(self, fail_on=None):
+        self.calls, self.fail_on = 0, fail_on
+
+    def match(self, task, tool, server_tools=()):
+        self.calls += 1
+        if task == self.fail_on:
+            raise ConnectionError("ollama went away")
+        from agenttrustsec.authz.semantic import MatchResult
+        return MatchResult(task.startswith("c"), 1.0, "fake")
+
+
+def _cases():
+    return [Case(t, (A,), {"c": "correct", "w": "wrong"}[t[0]], id=t) for t in ("c1", "c2", "w1", "w2")]
+
+
+def test_checkpoint_batches_resume_without_repeating(tmp_path):
+    ck, cases = tmp_path / "run.jsonl", _cases()
+    m1 = CountingMatcher()
+    out, done, total = astra_eval.run_checkpointed(m1, cases, ck, batch=3)
+    assert out is None and (done, total, m1.calls) == (3, 4, 3)
+    m2 = CountingMatcher()
+    out, done, total = astra_eval.run_checkpointed(m2, cases, ck, batch=3)
+    assert m2.calls == 1 and done == total == 4                     # only the missing check
+    assert [o.allowed for o in out] == [True, True, False, False]
+    assert all(o.latency_ms and o.latency_ms[0] >= 0 for o in out)
+
+
+def test_checkpoint_never_saves_an_infrastructure_error(tmp_path):
+    ck = tmp_path / "run.jsonl"
+    with pytest.raises(ConnectionError):
+        astra_eval.run_checkpointed(CountingMatcher(fail_on="w1"), _cases(), ck)
+    saved = astra_eval.load_checkpoint(ck)
+    assert set(saved) == {("c1", "a"), ("c2", "a")}                 # w1 will be retried, not BLOCKed

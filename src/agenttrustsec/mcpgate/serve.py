@@ -11,6 +11,7 @@ SLIM: the gateway dials OUT to the SLIM node (no inbound port) and refuses to st
     subject, role mcp_server) — a switch that won't join the fabric without a valid cert
   * its private key is the one bound to that badge (D2 `key_thumbprints`) and is in the
     trust JWKS — so agents' mutual-auth check can succeed
+  * its served tools/list is exactly the inventory that badge signs (item C) — no drift
 Every tools/call then passes the mandatory `peer` check (authz/peer.py) before TBAC/intent;
 change tools are also judged by the local LLM verifier (P4e, D4) — no Ollama / changed
 model = refuse to start.
@@ -47,6 +48,7 @@ from agenttrustsec.identity.agntcy import (
 from agenttrustsec.identity.badge import BadgeError
 from agenttrustsec.identity.keys import jwk_thumbprint, public_jwk
 from agenttrustsec.mcpgate.client import SERVER_ROLE
+from agenttrustsec.mcpgate import inventory
 from agenttrustsec.mcpgate.server import build_server
 from agenttrustsec.tools import extdata, netops
 
@@ -56,23 +58,34 @@ TRUST_JWKS = ROOT / "policies" / "trust-jwks.json"
 KEY_DIR = Path.home() / ".agenttrustsec" / "keys"
 
 
-def fetch_server_badge(node_http: str, server_id: str) -> str:
-    """Return the first published badge for server_id that verifies as our MCP server."""
+def fetch_server_badge(node_http: str, server_id: str, serving: inventory.Inventory) -> str:
+    """Return a published badge for server_id that verifies as our MCP server AND signs exactly
+    the tools we serve. A valid badge for other tools -> InventoryDrift (refuse to start)."""
     url = f"{node_http}/v1alpha1/vc/{server_id}/.well-known/vcs.json"
     with urllib.request.urlopen(url, timeout=5) as r:
         vcs = json.load(r).get("vcs") or []
     verifier = AgntcyBadgeVerifier(load_role_map(IDENTITIES, "mcp_servers"),
                                    badge_type=MCP_SERVER_BADGE)
-    errors = []
+    errors, drifted = [], []
     for vc in vcs:                                # node order isn't guaranteed
         try:
             ident = verifier.verify(vc.get("value"), server_id)
         except BadgeError as e:
             errors.append(str(e))
             continue
-        if ident.role == SERVER_ROLE:
+        if ident.role != SERVER_ROLE:
+            errors.append(f"role {ident.role!r} is not {SERVER_ROLE!r}")
+            continue
+        try:
+            diff = inventory.drift(inventory.from_badge({"tools": ident.tools}), serving)
+        except ValueError as e:
+            errors.append(str(e))
+            continue
+        if not diff:
             return vc["value"]
-        errors.append(f"role {ident.role!r} is not {SERVER_ROLE!r}")
+        drifted.append(f"badge {ident.badge_id}: {'; '.join(diff)}")
+    if drifted:
+        raise inventory.InventoryDrift(f"tool inventory drift (re-issue the badge): {' | '.join(drifted)}")
     raise BadgeError(f"no valid MCP server badge for {server_id!r}: {errors or 'none published'}")
 
 
@@ -147,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--transport slim requires --server-id")
     try:
         return asyncio.run(_serve_slim(args))
-    except (BadgeError, LlmUnavailable, ReplayStoreError) as e:
+    except (BadgeError, LlmUnavailable, ReplayStoreError, inventory.InventoryDrift) as e:
         print(f"{args.name}: REFUSING TO START: {e}", file=sys.stderr, flush=True)
         return 2
 
@@ -172,11 +185,13 @@ async def _serve_slim(args: argparse.Namespace) -> int:
     trust = load_trust_jwks(args.trust_jwks)
     pem = (args.key or KEY_DIR / f"{args.name}.pem").read_text()
     thumb = check_own_key(pem, args.server_id, trust)
-    badge = fetch_server_badge(args.node, args.server_id)
     broker = broker_from_env(SqliteJtiStore(args.jti_db))
     llm, llm_model = local_llm_matcher()
     gate = make_gate(args.audit, PeerBinding(trust), semantic=llm, approvals=broker)
-    server = build_server(args.name, gate, broker, badge, _registry(broker))
+    registry = _registry(broker)
+    serving = await inventory.served(build_server(args.name, gate, broker, None, registry))
+    badge = fetch_server_badge(args.node, args.server_id, serving)
+    server = build_server(args.name, gate, broker, badge, registry)
     name = slim_name(args.server_id)
     endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), args.slim)
     print(f"{args.name}: slim {name} via {args.slim}  badge=verified {args.server_id}  "

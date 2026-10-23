@@ -20,6 +20,8 @@ from agenttrustsec.mcpgate.server import (
 from agenttrustsec.models import Intent, Session
 from agenttrustsec.tools import extdata, netops
 
+from conftest import signed_server
+
 SERVER_ID = "netops-mcp"
 PUSH = {"device": "edge-fw-01", "lines": ["permit ip any any"]}
 
@@ -36,9 +38,7 @@ def intel(broker):
 
 @pytest.fixture
 def server(gate, broker, verifier, intel):
-    badge = verifier.issue(SERVER_ID, "mcp_server")
-    return build_server(SERVER_ID, gate, broker, badge,
-                        {**netops.REGISTRY, **extdata.make_registry(intel)})
+    return signed_server(SERVER_ID, gate, broker, verifier, {**netops.REGISTRY, **extdata.make_registry(intel)})
 
 
 def run(coro):

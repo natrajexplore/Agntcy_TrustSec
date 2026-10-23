@@ -15,7 +15,7 @@ import hmac
 import json
 import time
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class BadgeError(Exception):
@@ -28,6 +28,7 @@ class VerifiedIdentity:
     role: str
     badge_id: str
     key_thumbprint: str | None = None   # RFC 7638; the key the badge binds (P3)
+    tools: Any = None                   # item C: the tool list an MCP server badge signs (raw)
 
 
 class BadgeVerifier(Protocol):
@@ -56,7 +57,7 @@ class LocalDevVerifier:
 
     # --- issuance (would be the Identity Service in P2) -------------------
     def issue(self, agent_id: str, role: str, ttl_s: int = 3600,
-              badge_id: str | None = None) -> str:
+              badge_id: str | None = None, tools: list | None = None) -> str:
         now = int(time.time())
         payload = {
             "iss": self.issuer,
@@ -66,6 +67,8 @@ class LocalDevVerifier:
             "exp": now + ttl_s,
             "jti": badge_id or hashlib.sha256(f"{agent_id}{now}".encode()).hexdigest()[:16],
         }
+        if tools is not None:
+            payload["tools"] = tools
         body = _b64(json.dumps(payload, sort_keys=True).encode())
         sig = _b64(hmac.new(self._secret, body.encode(), hashlib.sha256).digest())
         return f"{body}.{sig}"
@@ -105,4 +108,5 @@ class LocalDevVerifier:
         role = claims.get("role")
         if not role:
             raise BadgeError("badge has no role")
-        return VerifiedIdentity(agent_id=claims["sub"], role=role, badge_id=claims["jti"])
+        return VerifiedIdentity(agent_id=claims["sub"], role=role, badge_id=claims["jti"],
+                                tools=claims.get("tools"))

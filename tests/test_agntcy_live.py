@@ -187,10 +187,21 @@ def _mcp_call(gate, server_badge, agent_id, read_session, server_id=SERVER_ID):
     return asyncio.run(go())
 
 
+def _gateway_tools(gate):
+    import asyncio
+    import secrets
+
+    from agenttrustsec.authz.broker import TokenBroker
+    from agenttrustsec.mcpgate import inventory, serve
+    from agenttrustsec.mcpgate.server import build_server
+    b = TokenBroker(secrets.token_bytes(32))
+    return asyncio.run(inventory.served(build_server("netops-mcp", gate, b, None, serve._registry(b))))
+
+
 def test_mcp_mutual_auth_with_real_badges(live, policy, audit, read_session):
     from agenttrustsec.mcpgate.serve import fetch_server_badge
     gate = Gate(live, policy, BaselineIntentChecker(), audit)
-    r = _mcp_call(gate, fetch_server_badge(NODE_HTTP, SERVER_ID), BY_ROLE["reader"],
+    r = _mcp_call(gate, fetch_server_badge(NODE_HTTP, SERVER_ID, _gateway_tools(gate)), BY_ROLE["reader"],
                   read_session)
     assert not r.is_error
     assert [x["verdict"] for x in audit.read_all()] == ["ALLOW"]
@@ -203,3 +214,27 @@ def test_mcp_agent_badge_cannot_pose_as_server(live, policy, audit, read_session
     with pytest.raises(ServerAuthError, match="expected MCPServerBadge"):
         _mcp_call(gate, published_badge(executor), BY_ROLE["reader"], read_session,
                   server_id=executor)
+
+
+def test_C_gateway_badge_signs_what_it_serves_and_the_stale_one_is_revoked(live, policy, audit):
+    # item C (2026-10-23): VC 49479d21 re-issued from the live tools/list; 3abc3ccf (stale
+    # review_change) revoked. The verified badge's signed inventory == what the gateway serves.
+    from agenttrustsec.mcpgate import inventory
+    from agenttrustsec.mcpgate.serve import fetch_server_badge
+    gate = Gate(live, policy, BaselineIntentChecker(), audit)
+    verifier = AgntcyBadgeVerifier(SERVERS, badge_type=MCP_SERVER_BADGE)
+    ident = verifier.verify(fetch_server_badge(NODE_HTTP, SERVER_ID, _gateway_tools(gate)), SERVER_ID)
+    assert ident.badge_id == "49479d21-e220-4ed6-86e4-e7c9a2eacb94"
+    assert inventory.drift(inventory.from_badge({"tools": ident.tools}), _gateway_tools(gate)) == []
+    url = f"{NODE_HTTP}/v1alpha1/vc/{SERVER_ID}/.well-known/vcs.json"
+    with urllib.request.urlopen(url, timeout=5) as r:
+        vcs = [vc["value"] for vc in json.load(r)["vcs"]]
+    stale = [v for v in vcs if _vc_id(v) == "3abc3ccf-d9e0-4a3d-9a64-fd48532953df"]
+    assert len(stale) == 1
+    with pytest.raises(BadgeError, match="revoked"):
+        verifier.verify(stale[0], SERVER_ID)
+
+
+def _vc_id(jose):
+    part = jose.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))).get("id")

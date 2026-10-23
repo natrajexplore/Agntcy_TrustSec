@@ -8,6 +8,9 @@ before the agent reads it (T9).
 Over SLIM (P3) pass `transport_peer` + `peer_binding`: the gateway must then also prove
 it holds the key bound to its badge (D2 table), so a copied server badge is useless.
 In-process / dev use without them keeps the bearer-badge limitation (no possession proof).
+
+Item C: a result also counts only if the MCP server's badge SIGNS the tool called and every
+argument sent (mcpgate/inventory.py) — a gateway serving uncertified tools is not trusted.
 """
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from mcp_types import CallToolResult
 
 from agenttrustsec.authz.peer import PeerBinding
 from agenttrustsec.identity.badge import BadgeError, BadgeVerifier
+from agenttrustsec.mcpgate.inventory import from_badge, vouches_for
 from agenttrustsec.models import TransportPeer
 from agenttrustsec.mcpgate.server import (
     META_AGENT, META_APPROVAL, META_BADGE, META_DECISION, META_SERVER_BADGE, META_SESSION,
@@ -64,7 +68,7 @@ class TrustedClient:
         if self.badge is not None:
             meta[META_BADGE] = self.badge
         result = await self.client.call_tool(tool, args or {}, meta=meta)
-        self._verify_server(result)
+        self._verify_server(result, tool, args or {})
         if result.is_error:
             d = (result.meta or {}).get(META_DECISION)
             if d:
@@ -72,7 +76,7 @@ class TrustedClient:
             raise RuntimeError(_text(result))
         return result
 
-    def _verify_server(self, result: CallToolResult) -> None:
+    def _verify_server(self, result: CallToolResult, tool: str, args: dict[str, Any]) -> None:
         badge = (result.meta or {}).get(META_SERVER_BADGE)
         try:
             ident = self.verifier.verify(badge, self.server_id)
@@ -88,6 +92,14 @@ class TrustedClient:
                 raise ServerAuthError(f"MCP server {self.server_id!r} peer check error: {e}") from None
             if not r.passed:
                 raise ServerAuthError(f"MCP server {self.server_id!r} not trusted: {r.reason}")
+        if self.server_role == SERVER_ROLE:     # item C: only what the badge vouches for
+            try:
+                why = vouches_for(from_badge({"tools": ident.tools}) if ident.tools is not None else None,
+                                  tool, args)
+            except ValueError as e:
+                why = str(e)
+            if why:
+                raise ServerAuthError(f"MCP server {self.server_id!r} not trusted: {why}")
 
 
 def _text(result: CallToolResult) -> str:

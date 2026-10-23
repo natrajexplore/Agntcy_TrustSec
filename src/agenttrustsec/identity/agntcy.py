@@ -143,7 +143,19 @@ class AgntcyBadgeVerifier:
         if not role:
             raise BadgeError(f"no role mapped for verified id {subject!r}")
         return VerifiedIdentity(agent_id=subject, role=role, badge_id=doc.id or subject,
-                                key_thumbprint=self._bound_key(subject, doc.content))
+                                key_thumbprint=self._bound_key(subject, doc.content),
+                                tools=self._signed_tools(doc.content))
+
+    def _signed_tools(self, content: Any) -> Any:
+        """Item C: the tool list the issuer signed into an MCPServerBadge (None otherwise)."""
+        if self.badge_type != MCP_SERVER_BADGE:
+            return None
+        try:
+            raw = content["badge"] if "badge" in content else None
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            raise BadgeError("MCPServerBadge content unreadable") from None
+        return data.get("tools") if isinstance(data, dict) else None
 
     def _bound_key(self, subject: str, content: Any) -> str | None:
         signed = _badge_thumbprint(content)

@@ -15,6 +15,17 @@ from agenttrustsec.tools import netops
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def signed_server(name, gate, broker, verifier, registry):
+    """build_server() with a dev MCP-server badge that signs exactly what it serves (item C)."""
+    import asyncio
+
+    from agenttrustsec.mcpgate import inventory
+    from agenttrustsec.mcpgate.server import build_server
+    serving = asyncio.run(inventory.served(build_server(name, gate, broker, None, registry)))
+    badge = verifier.issue(name, "mcp_server", tools=inventory.to_badge_tools(serving))
+    return build_server(name, gate, broker, badge, registry)
+
+
 @pytest.fixture
 def verifier():
     return LocalDevVerifier(secrets.token_bytes(32))

@@ -59,6 +59,7 @@ src/agenttrustsec/
   mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
   mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
   mcpgate/serve.py     # Gateway runner: SLIM for tool calls (peer check ON); HTTP = issuance only
+  mcpgate/inventory.py # Signed tool inventory (MCPServerBadge) vs served tools/list: drift = refuse
   audit/log.py         # JSONL audit writer
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only

@@ -93,8 +93,8 @@ labelled scenarios — **exact decision, exact check IDs, human-review flag all 
 RuleGate treats unspecified request fields as `any`, so an empty request reviews as allow
 any/any → REJECT, score 100 (fail-safe).
 **Side effect:** the gateway's MCPServerBadge signs the tool inventory as issued; the new
-`review_change` signature/description make that inventory stale until the badge is re-issued
-(nothing checks drift yet — backlog item).
+`review_change` signature/description made that inventory stale — resolved by item C (§5i):
+drift check + badge re-issued.
 
 ## 5c. P5b as built (2026-10-25)
 
@@ -164,6 +164,27 @@ any/any → REJECT, score 100 (fail-safe).
 * **Known limits:** (1) ~~nothing proves the lines *implement* the reviewed request~~ —
   resolved by item A (§5g). (2) ~~redeemed jtis live in the gateway's memory~~ — resolved by
   item B (§5h). (3) One reviewer in the lab pool.
+
+## 5i. Item C as built (2026-10-23) — tool inventory drift check + gateway badge re-issued
+
+* `mcpgate/inventory.py`: the inventory the MCPServerBadge signs (`credentialSubject.badge`
+  tools: name, description, parameters = `inputSchema` minus its top-level `title` — matches the
+  CLI for the 5 unchanged tools) vs the gateway's own `tools/list`; `drift()` names added /
+  removed / changed (description, parameters) tools. `VerifiedIdentity.tools` carries the signed
+  list (only from a badge that verified).
+* Gateway (`serve.py`): picks the published badge that verifies AND signs exactly what it serves
+  (node order irrelevant); a valid badge for other tools → `REFUSING TO START: tool inventory
+  drift (re-issue the badge)`. Live negative control with the old badge:
+  `badge 3abc3ccf…: review_change changed (description, parameters)`, exit 2.
+* Agents (`TrustedClient`, MCP-server role only): a result counts only if the badge signs the
+  tool called and every argument sent → else `ServerAuthError`. Agent job servers (AgentBadges,
+  no tool list) are unaffected.
+* Re-issued under the same metadata id (`notes-p1.md` §10): new VC `49479d21-…` (from the live
+  `tools/list`), old VC `3abc3ccf-…` **revoked**. `identities.yaml`, key binding (D2) and
+  `lab/agents.yaml` unchanged.
+* TrustSec analogy: a switch whose certificate no longer describes what it does is not let on
+  the fabric, and endpoints only trust answers to services the certificate vouches for.
+* Full suite **577 passed** with lab + Ollama up.
 
 ## 5h. Item B as built (2026-10-23) — spent tokens survive a restart (owner: SQLite, defaults)
 

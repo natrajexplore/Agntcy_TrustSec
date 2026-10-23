@@ -101,8 +101,10 @@ Role is taken **only from the verified badge**, never from the caller's claim.
   D2 table) — copied agent badges and an impostor gateway with a copied MCPServerBadge are
   BLOCKED (`tests/test_gateway_slim_live.py`, `test_gateway_impostor_live.py`). Still
   bearer in-process / dev (no transport), which is why tool calls are SLIM-only (D4).
-- The MCPServerBadge signs the server's tool inventory (`identity badge issue mcp`
-  discovers it). Should the client compare live `tools/list` to the badge (drift check)?
+- ~~Should the client compare live `tools/list` to the badge (drift check)?~~ Done (item C,
+  `mcpgate/inventory.py`): the gateway refuses to start when what it serves drifts from the
+  inventory its MCPServerBadge signs, and agents refuse results for a tool / argument the badge
+  does not sign (`docs/P5-design.md` §5i).
 - Should `tools/list` be filtered per verified role (hide tools an agent can't call)?
 - AGNTCY badges without `expiration_date` are currently accepted (lifecycle via node
   revocation). Require expiry instead? Decide after seeing real badges.

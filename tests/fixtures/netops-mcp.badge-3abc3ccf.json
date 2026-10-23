@@ -1,0 +1,115 @@
+{
+  "name": "netops-mcp",
+  "url": "http://localhost:9090",
+  "tools": [
+    {
+      "name": "show_running_config",
+      "description": "Read the running configuration of a device",
+      "parameters": {
+        "properties": {
+          "device": {
+            "title": "Device",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "show_acl",
+      "description": "List access-control entries on a device",
+      "parameters": {
+        "properties": {
+          "device": {
+            "title": "Device",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "show_bgp_neighbors",
+      "description": "Show BGP neighbor state",
+      "parameters": {
+        "properties": {
+          "device": {
+            "title": "Device",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "review_change",
+      "description": "Risk-review an ACL / firewall rule set or proposed change",
+      "parameters": {
+        "properties": {
+          "change": {
+            "default": "",
+            "title": "Change",
+            "type": "string"
+          },
+          "device": {
+            "title": "Device",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "push_config",
+      "description": "Push configuration lines to a device (CHANGE)",
+      "parameters": {
+        "properties": {
+          "device": {
+            "title": "Device",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device",
+          "lines"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "name": "lookup_threat_intel",
+      "description": "Look up IP reputation in an external threat-intel API",
+      "parameters": {
+        "properties": {
+          "ip": {
+            "title": "Ip",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      }
+    }
+  ]
+}

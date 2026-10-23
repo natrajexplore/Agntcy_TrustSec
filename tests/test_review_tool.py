@@ -15,7 +15,7 @@ from agenttrustsec.models import Intent, Session
 from agenttrustsec.review.engine import UnknownDevice
 from agenttrustsec.tools import netops
 
-from conftest import ROOT
+from conftest import ROOT, signed_server
 
 CRS = ROOT / "tests" / "fixtures" / "rulegate" / "change_requests"
 
@@ -72,8 +72,7 @@ def test_reviewer_calls_review_change_through_the_gate(gate, verifier, audit):
     from mcp import Client
 
     broker = TokenBroker(secrets.token_bytes(32))
-    server = build_server("netops-mcp", gate, broker, verifier.issue("netops-mcp", "mcp_server"),
-                          netops.REGISTRY)
+    server = signed_server("netops-mcp", gate, broker, verifier, netops.REGISTRY)
     session = broker.seal_session(Session(
         "Risk-review the proposed change CR-1003 on edge-fw-01", Intent.READ))
 

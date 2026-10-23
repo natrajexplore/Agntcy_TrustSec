@@ -233,6 +233,23 @@ Output (2026-10-20):
 Node `.well-known` lists the newest VC first, but order isn't guaranteed — consumers
 must pick by content (unrevoked / VC id), never by position.
 
+**10. Gateway badge re-issued (item C, 2026-10-23).** P5a changed `review_change`
+(`change`: object, new description), so the signed inventory drifted; the gateway now refuses
+to start on drift (`mcpgate/inventory.py`). Re-issue under the SAME metadata id, then revoke:
+```bash
+python -m agenttrustsec.mcpgate.serve --port 9090 --jti-db <tmp> &      # issuance mode
+identity metadata load -m AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add
+out=$(identity badge issue mcp -u http://localhost:9090 -n netops-mcp) && echo "$out"
+identity badge publish -b "${out##*: }" -i http://localhost:4000
+kill %1
+python lab/identity/revoke_badge.py AGNTCY-2e3bc5c0-… --vc-id 3abc3ccf-d9e0-4a3d-9a64-fd48532953df --yes
+```
+Output: CLI badge `223a8b6a-…`, new VC `49479d21-e220-4ed6-86e4-e7c9a2eacb94` (issued
+2026-10-23T10:42:51Z, 6 tools, `review_change.change` = object); old VC `3abc3ccf-…` now
+published with REVOCATION status. Before the re-issue the gateway refused:
+`tool inventory drift (re-issue the badge): badge 3abc3ccf…: review_change changed
+(description, parameters)`. Note: `metadata load` leaves the CLI context on the gateway's id.
+
 ## CASA (github.com/outshift-open/outshift-casa)
 - [ ] `bash scripts/dev/local-setup-standalone.sh` on Minikube
 - [ ] Run safe vs compromised demo agent; screenshot Explorer UI traces

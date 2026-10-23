@@ -1,8 +1,6 @@
 # AgentTrustSec CI — unit tests + secret scan on every push to main and every pull request.
 #
-# LOCAL ONLY for now: this file lives on the never-pushed `ci-local` branch and is run
-# with `act` (nektos/act). GitHub runs a workflow only once a file under
-# .github/workflows/ is pushed to GitHub — until then nothing happens there.
+# Runs on GitHub-hosted runners. To run it locally first, use `act` (nektos/act):
 #
 #   docker network create act-isolated        # once
 #   act -P ubuntu-latest=catthehacker/ubuntu:act-latest --network act-isolated

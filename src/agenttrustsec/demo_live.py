@@ -336,6 +336,11 @@ def run(quick: bool, audit_dir: Path = ROOT / "audit") -> int:
         mem.stop()
     ran = [(s, o) for s, o in results if o is not None]
     bad = [s.label for s, o in ran if (o.verdict, o.by) != (s.expect, s.expect_by)]
+    (run_dir / "results.json").write_text(json.dumps([   # step outcomes for eval/bench.py + dashboard
+        {"act": s.act, "label": s.label, "expect": s.expect, "expect_by": s.expect_by,
+         "verdict": o.verdict if o else None, "by": o.by if o else None, "reason": o.reason if o else "skipped",
+         "ok": None if o is None else (o.verdict, o.by) == (s.expect, s.expect_by)} for s, o in results],
+        indent=1), encoding="utf-8")
     print("\n== Gateway decisions (ISE Live Logs view, UTC; * = claimed identity, never verified) ==")
     print("\n".join(live_logs(lab.audit("gateway"))) or "  (none)")
     print(f"\nAudit trails: {run_dir}")

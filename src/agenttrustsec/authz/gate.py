@@ -13,6 +13,8 @@ Rules enforced here (see CLAUDE.md):
 """
 from __future__ import annotations
 
+import time
+from dataclasses import replace
 from typing import Any, Callable
 
 from agenttrustsec.audit.log import AuditLog
@@ -30,6 +32,26 @@ class BlockedError(PermissionError):
         super().__init__(f"BLOCKED by {decision.blocked_by}: {decision.call.tool}")
 
 
+def _ms(t0: float) -> float:
+    return round((time.perf_counter() - t0) * 1000, 3)
+
+
+class _TimedChecks(list):
+    """P6a: stamps each appended check with the time since the previous append (the time the
+    check took — evaluation runs strictly in order). Timing never affects a verdict."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._t = time.perf_counter()
+
+    def append(self, c: CheckResult) -> None:
+        now = time.perf_counter()
+        if c.status is not Status.SKIPPED:
+            c = replace(c, elapsed_ms=round((now - self._t) * 1000, 3))
+        super().append(c)
+        self._t = now
+
+
 class Gate:
     def __init__(self, verifier: BadgeVerifier, policy: TbacPolicy,
                  intent: IntentChecker, audit: AuditLog, peer: PeerBinding | None = None,
@@ -42,7 +64,8 @@ class Gate:
         self.audit = audit
 
     def authorize(self, call: ToolCall) -> Decision:
-        checks: list[CheckResult] = []
+        t0 = time.perf_counter()
+        checks = _TimedChecks()
         role: str | None = None
         ident = None
 
@@ -114,6 +137,7 @@ class Gate:
             checks=tuple(checks),
             verdict=Verdict.ALLOW if allow else Verdict.BLOCK,
             verified_role=role,
+            elapsed_ms=_ms(t0),
         )
         self.audit.write(decision)
         return decision

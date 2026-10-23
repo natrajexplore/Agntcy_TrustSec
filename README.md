@@ -189,6 +189,17 @@ Measured on the 15.5 GB dev laptop (cold model): 8.9 GB in use before the run, *
 peak** (+5.3 GB, almost all of it the 5.5 GB local model), ~50 s for the full run. Acts 1–3 run
 before the impersonated agents start because SLIM routes by name.
 
+### What it costs (P6a, `eval/results/p6a-latency.md`)
+
+| Call through the live gateway | p50 end to end | of which the gate |
+|---|---|---|
+| read (`show_acl`) | 26 ms | ~5 ms (mostly Identity Node lookups) |
+| change, new request (local LLM verdict on CPU) | 4.5 s | 4.5 s (`intent`) |
+| change, repeated request (cached verdict) | 30 ms | ~6 ms |
+
+Offline, the enforcement logic itself is ~0.1 ms per decision. Every check's time is in the audit
+record (`elapsed_ms`). Reproduce with `python eval/bench.py live --write`.
+
 Issuing badges and keys for your own lab: runbook in `docs/notes-p1.md` (Identity steps
 1–9) and `docs/P3-design.md` §7. Keys live in `~/.agenttrustsec/keys/`, never in the repo.
 

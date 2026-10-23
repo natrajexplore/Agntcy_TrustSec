@@ -115,3 +115,14 @@ def test_one_audit_record_per_call(gate, verifier, read_session, audit):
 ])
 def test_classify_intent(prompt, expected):
     assert classify_intent(prompt) is expected
+
+
+def test_P6a_every_evaluated_check_and_the_decision_are_timed(gate, verifier, read_session, audit):
+    gate.authorize(call("reader-01", verifier.issue("reader-01", "reader"), "show_acl", read_session))
+    gate.authorize(call("rogue", None, "push_config", read_session, PUSH))
+    ok, blocked = audit.read_all()
+    assert all(c["elapsed_ms"] >= 0 for c in ok["checks"])
+    assert ok["elapsed_ms"] >= sum(c["elapsed_ms"] for c in ok["checks"]) - 0.01
+    for c in blocked["checks"]:                                   # SKIPPED checks never ran
+        assert (c["elapsed_ms"] is None) == (c["status"] == "SKIPPED")
+    assert blocked["verdict"] == "BLOCK" and blocked["elapsed_ms"] >= 0

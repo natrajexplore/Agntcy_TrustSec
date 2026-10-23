@@ -118,3 +118,6 @@ def test_quick_demo_meets_every_expectation_on_the_live_lab(tmp_path):
     assert out.returncode == 0, out.stdout[-2000:] + out.stderr[-1000:]
     assert "RESULT: all expectations met" in out.stdout
     assert "skipped (--quick)" in out.stdout and "ISE Live Logs" in out.stdout
+    results = json.loads(next(tmp_path.glob("demo-*/results.json")).read_text(encoding="utf-8"))
+    assert [r["label"][:2] for r in results if r["ok"] is None] == ["#4", "#5"]      # skipped
+    assert all(r["ok"] for r in results if r["ok"] is not None)

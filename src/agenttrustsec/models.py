@@ -62,6 +62,7 @@ class CheckResult:
     name: str
     status: Status
     reason: str
+    elapsed_ms: float | None = None     # P6a: set by the gate; None = not timed (e.g. SKIPPED)
 
     @property
     def passed(self) -> bool:
@@ -74,6 +75,7 @@ class Decision:
     checks: tuple[CheckResult, ...]
     verdict: Verdict
     verified_role: str | None
+    elapsed_ms: float | None = None     # P6a: whole decision, all checks
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -105,4 +107,5 @@ class Decision:
             ],
             "verdict": self.verdict.value,
             "blocked_by": self.blocked_by,
+            "elapsed_ms": self.elapsed_ms,
         }

@@ -9,15 +9,21 @@ first failure decides (every one is named in the audit reason):
   2. scope (P4b, T6): every value of the tool's `scoped_args` (device, IP, ...) must be
      named in the sealed user request; a tool with no `scoped_args` declaration is
      BLOCKED (deny by default, D5).
-  3. relevance: the user prompt must share at least one keyword with the tool's policy
-     keywords. No overlap -> FAIL. P4c/P4d replace this step with a semantic matcher,
-     evaluated first (docs/P4-design.md).
+  3. relevance:
+     - change tools, when a semantic matcher is configured (P4e, D4 = change tools only):
+       the local LLM verifier must allow the tool for this request (rule 4's semantic
+       check). A matcher error propagates -> the gate records ERROR -> BLOCK.
+     - read tools (and the keyword-only dev/test mode): the user prompt must share at least
+       one keyword with the tool's policy keywords. No overlap -> FAIL.
+The gateway (mcpgate/serve.py, SLIM) always runs with the semantic matcher; keyword-only
+mode exists for unit tests and the offline demo. Evaluation: docs/P4-design.md.
 """
 from __future__ import annotations
 
 import re
 from typing import Any, Protocol
 
+from agenttrustsec.authz.semantic import SemanticMatcher, ToolRef
 from agenttrustsec.authz.tbac import ToolSpec
 from agenttrustsec.models import CheckResult, Intent, Session, Status
 
@@ -67,6 +73,9 @@ class IntentChecker(Protocol):
 
 
 class BaselineIntentChecker:
+    def __init__(self, semantic: SemanticMatcher | None = None):
+        self.semantic = semantic          # P4e: judges change tools when set
+
     def check(self, session: Session, spec: ToolSpec,
               args: dict[str, Any] | None = None) -> CheckResult:
         if spec.change and session.intent is not Intent.CHANGE:
@@ -78,6 +87,11 @@ class BaselineIntentChecker:
         scope_problem = check_scope(session.user_prompt, spec, args)
         if scope_problem:
             return CheckResult("intent", Status.FAIL, f"scope: {scope_problem}")
+        scoped = ", ".join(f"{a}={args[a]!r}" for a in spec.scoped_args) if spec.scoped_args else "none"
+        if spec.change and self.semantic is not None:
+            verdict = self.semantic.match(session.user_prompt, ToolRef(spec.name, spec.description))
+            return CheckResult("intent", Status.PASS if verdict.allow else Status.FAIL,
+                               f"scope ok ({scoped}); semantic: {verdict.reason}")
         words = set(re.findall(r"[a-z0-9_]+", session.user_prompt.lower()))
         overlap = words & spec.keywords
         if not overlap:
@@ -85,7 +99,6 @@ class BaselineIntentChecker:
                 "intent", Status.FAIL,
                 f"{spec.name!r} not relevant to request (no keyword overlap)",
             )
-        scoped = ", ".join(f"{a}={args[a]!r}" for a in spec.scoped_args) if spec.scoped_args else "none"
         return CheckResult(
             "intent", Status.PASS,
             f"scope ok ({scoped}); matches request on {sorted(overlap)}",

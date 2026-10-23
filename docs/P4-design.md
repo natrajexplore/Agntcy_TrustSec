@@ -190,6 +190,19 @@ cost per tool per session; owner decides at P4e.
 **Open for P4e:** the plain prompt's over-blocking (26% on ASTRA, 1/18 on netops) vs the
 provisional D4 bar (false-block ≤ 10%, p95 ≤ 1.5 s — latency also unreachable locally).
 
+## 4g. P4e — wired into the gate (2026-10-24), `eval/results/p4e-gate.md`
+
+**D4 = change tools only (owner).** `BaselineIntentChecker(semantic)`: change gate → scope →
+for `change: true` tools the local LLM verdict (rule 4's semantic check); read tools keep the
+keyword relevance check (no LLM latency, no LLM over-blocking on reads). A matcher error
+propagates → gate ERROR → BLOCK. `serve.py --transport slim` builds `LlmMatcher(ollama_judge())`
+at startup and **refuses to start** if Ollama is down or the pinned model changed — no fallback
+to keywords. Keyword-only mode remains for unit tests and the offline demo.
+Netops: same as the keyword gate (only a01 wrongly allowed, 0 legitimate blocked); every
+legitimate change passed the LLM; latency only on change calls (p95 ≈ 5 s here).
+**Not yet verified live:** the SLIM gateway tests (lab containers were stopped; Docker +
+gateway + Ollama's ~7 GB may hit the laptop's memory limit).
+
 ## 5. Work order (one PR each)
 
 * **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline
@@ -197,7 +210,7 @@ provisional D4 bar (false-block ≤ 10%, p95 ≤ 1.5 s — latency also unreacha
 * **P4b** ✅ scope check (deterministic args) + `scoped_args` in `tbac.yaml` + tests.
 * **P4c** ✅ `EmbeddingMatcher` (local model, pinned) + eval numbers — D2 → Claude only.
 * **P4d** ✅ `LlmMatcher` on local Ollama (pinned qwen2.5:7b) + local eval runs — **paid runs only after you approve the budget**.
-* **P4e** wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
+* **P4e** ✅ wire the winner into the gate behind a policy setting; keep `BaselineIntentChecker`
   for offline dev; README/ARCHITECTURE update.
 
 ## 6. Decisions

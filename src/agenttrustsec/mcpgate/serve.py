@@ -11,7 +11,9 @@ SLIM: the gateway dials OUT to the SLIM node (no inbound port) and refuses to st
     subject, role mcp_server) — a switch that won't join the fabric without a valid cert
   * its private key is the one bound to that badge (D2 `key_thumbprints`) and is in the
     trust JWKS — so agents' mutual-auth check can succeed
-Every tools/call then passes the mandatory `peer` check (authz/peer.py) before TBAC/intent.
+Every tools/call then passes the mandatory `peer` check (authz/peer.py) before TBAC/intent;
+change tools are also judged by the local LLM verifier (P4e, D4) — no Ollama / changed
+model = refuse to start.
 
 Agents are verified as AGNTCY badges against `policies/identities.yaml`. Sessions are
 sealed by the broker; AGENTTRUSTSEC_BROKER_KEY (hex, >= 32 bytes) shares its key with the
@@ -97,11 +99,25 @@ def broker_from_env() -> TokenBroker:
     return TokenBroker(key)
 
 
-def make_gate(audit_path: Path, peer: PeerBinding | None) -> Gate:
+def make_gate(audit_path: Path, peer: PeerBinding | None, semantic=None) -> Gate:
     verifier = AgntcyBadgeVerifier(load_role_map(IDENTITIES, "agents"),
                                    key_thumbprints=load_key_thumbprints(IDENTITIES))
     return Gate(verifier, TbacPolicy.from_yaml(ROOT / "policies" / "tbac.yaml"),
-                BaselineIntentChecker(), AuditLog(audit_path), peer=peer)
+                BaselineIntentChecker(semantic), AuditLog(audit_path), peer=peer)
+
+
+class LlmUnavailable(Exception):
+    """The local LLM verifier can't be set up -> the gateway refuses to start (D3)."""
+
+
+def local_llm_matcher():
+    """P4e (D4): change tools are judged by the local Ollama verifier. Ollama down or the
+    pinned model changed -> refuse to start; never fall back to the keyword check."""
+    from agenttrustsec.authz.semantic import OLLAMA_MODEL, LlmMatcher, ollama_judge
+    try:
+        return LlmMatcher(ollama_judge()), OLLAMA_MODEL
+    except (OSError, RuntimeError) as e:          # URLError is an OSError
+        raise LlmUnavailable(f"local LLM verifier unavailable: {e}") from None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--transport slim requires --server-id")
     try:
         return asyncio.run(_serve_slim(args))
-    except BadgeError as e:
+    except (BadgeError, LlmUnavailable) as e:
         print(f"{args.name}: REFUSING TO START: {e}", file=sys.stderr, flush=True)
         return 2
 
@@ -152,12 +168,13 @@ async def _serve_slim(args: argparse.Namespace) -> int:
     thumb = check_own_key(pem, args.server_id, trust)
     badge = fetch_server_badge(args.node, args.server_id)
     broker = broker_from_env()
-    gate = make_gate(args.audit, PeerBinding(trust))
+    llm, llm_model = local_llm_matcher()
+    gate = make_gate(args.audit, PeerBinding(trust), semantic=llm)
     server = build_server(args.name, gate, broker, badge, _registry(broker))
     name = slim_name(args.server_id)
     endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), args.slim)
     print(f"{args.name}: slim {name} via {args.slim}  badge=verified {args.server_id}  "
-          f"key={thumb}  peer-check=ON", flush=True)
+          f"key={thumb}  peer-check=ON  change-tools-llm={llm_model}", flush=True)
     await slim.serve_slim(server, endpoint)
     return 0
 

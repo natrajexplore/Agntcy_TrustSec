@@ -76,7 +76,8 @@ Design principles (non-negotiable, see `CLAUDE.md`):
    [1b] peer    SLIM token sub == SLIM subject == routing name == badge holder,
                 and the token verifies with the badge-bound key   (proof of possession)
    [2]  tbac    role allowed for this tool                         (SGACL)
-   [3]  intent  change tools need a `change` session + relevance   (posture)
+   [3]  intent  target (device/IP) named in the request (scope); change tools need a
+                `change` session + a local-LLM verdict; reads need keyword relevance
    ALL pass → ALLOW (+ scoped token for external APIs)   else BLOCK
    → exactly one audit record (peer identity included, tokens never)
 ```
@@ -174,7 +175,7 @@ tests/                   unit tests + live tests against the lab
 | P1 | Learn by running SLIM, Identity, CASA | 🟡 SLIM + Identity done; CASA pending (needs Minikube) |
 | P2 | Real AGNTCY badges: issue, verify, revoke | ✅ incl. the revocation-replay fix |
 | P3 | SLIM transport with key-bound identity | ✅ keys, adapter, peer check, gateway on SLIM, attested reviewer groups |
-| P4 | Semantic intent checker, evaluated on ASTRA | ⏳ |
+| P4 | Intent: scope check + local LLM verifier for change tools, evaluated on ASTRA | ✅ (live gateway re-test pending) |
 | P5 | Real agents: intake, reader (pyATS/mock), Palo Alto / FTD change reviewer, executor, rogue | ⏳ |
 | P6 | Live decisions dashboard, latency and block-rate benchmarks, node admission control | ⏳ |
 

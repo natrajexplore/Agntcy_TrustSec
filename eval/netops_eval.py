@@ -52,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--mode", default="margin")
     ap.add_argument("--threshold", nargs="+", type=float, default=[-0.12])
     ap.add_argument("--llm", action="store_true", help="also run LlmMatcher on the local Ollama model")
+    ap.add_argument("--gate-llm", action="store_true",
+                    help="also run the P4e gate intent check (change tools judged by the local LLM)")
     args = ap.parse_args(argv)
     policy = TbacPolicy.from_yaml(ROOT / "policies" / "tbac.yaml")
     cases = load(policy)
@@ -81,6 +83,14 @@ def main(argv: list[str] | None = None) -> int:
             r = emb.match(case.task, tool, case.server_tools[SERVER])
             return r.allow, r.reason
         runs[f"embedding {args.embedding.split('/')[-1]} {args.mode}={th} (live)"] = run(embedding_only, cases)
+    if args.gate_llm:
+        from agenttrustsec.authz.semantic import OLLAMA_MODEL, LlmMatcher, ollama_judge
+        p4e = BaselineIntentChecker(LlmMatcher(ollama_judge()))
+
+        def gate_intent_p4e(case, tool):
+            r = p4e.check(Session(case.task, case.intent), policy.spec(tool.name), case.args)
+            return r.passed, r.reason
+        runs[f"gate intent P4e (change tools -> {OLLAMA_MODEL})"] = run(gate_intent_p4e, cases)
     llm = None
     if args.llm:
         from agenttrustsec.authz.semantic import OLLAMA_MODEL, LlmMatcher, ollama_judge

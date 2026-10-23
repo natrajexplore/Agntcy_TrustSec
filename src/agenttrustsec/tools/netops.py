@@ -10,6 +10,9 @@ from typing import Any
 
 PUSHED: list[dict] = []
 
+# Lab inventory (the CMDB stand-in): the only device names agents may plan against.
+DEVICES = ("edge-fw-01", "edge-fw-02", "core-rtr-01", "core-rtr-02")
+
 _ACLS = {
     "edge-fw-01": [
         "permit tcp any host 10.0.0.10 eq 443",

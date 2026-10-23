@@ -113,12 +113,31 @@ any/any → REJECT, score 100 (fail-safe).
 * Bug found on the way: an MCP error raised inside the client's task group arrives as an
   ExceptionGroup; agents capture and re-raise outside it (same pattern as the test children).
 
+## 5d. P5c1 as built (2026-10-25) — owner approved: agent-to-agent = MCP over SLIM + caller gate
+
+* **Confused-deputy guard** (`agents/jobserver.py`): a worker acts under its own badge, so a job
+  is accepted only if the caller's badge verifies, the caller's SLIM token is signed by that
+  badge's key (peer check) and its role may dispatch (`reader` accepts only `intake`). One audit
+  record per dispatch; the forwarded sealed session is never logged; the worker stamps its own
+  badge so the caller verifies it (`TrustedClient(server_role=...)`).
+* `agents/reader.py serve`: long-running job server on SLIM (`run_job(tool, args, session)`),
+  forwards the session to the gateway; gateway blocks come back as results.
+* `agents/intake.py`: classifies intent, **seals the session** (owns the broker key), plans one
+  job deterministically — devices only from the lab inventory (`tools/netops.DEVICES`, whole
+  tokens), IPv4 validated, exactly one tool group + its target, otherwise refused — and
+  dispatches with mutual auth. Change requests are refused until P5c2/P5d.
+* Planner reproduces every legitimate read case of `eval/netops_cases.yaml` exactly.
+* Live: intake → reader → gateway ALLOW (both audit trails); **executor-01 with its genuine
+  badge and key trying to dispatch to the reader → `caller` BLOCK**; unplannable request
+  refused. Full suite 408 passed with the lab up.
+
 ## 6. Work order (one PR each)
 
 * **P5a** ✅ vendor RuleGate core → `review/`; `review_change` uses it; tests incl. RuleGate's
   own sample CRs (CR-1003 any/any must be rejected).
 * **P5b** ✅ agent runtime (identity, SLIM endpoint, `TrustedClient`) + `reader-01` + CLI.
-* **P5c** `intake-01`: session sealing, intent, routing, reviewer-group moderation.
+* **P5c1** ✅ `intake-01`: session sealing, intent, planning, dispatch to an authenticated reader.
+* **P5c2** intake proposes changes to the attested reviewer group (with P5d's reviewer).
 * **P5d** `reviewer-01` + `executor-01` + approval token (E3) in broker and gate.
 * **P5e** rogue scenarios + one end-to-end demo script on the live lab; README walkthrough.
 

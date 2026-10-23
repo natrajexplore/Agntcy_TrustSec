@@ -43,9 +43,10 @@ class TrustedClient:
     def __init__(self, client: Client, *, agent_id: str, badge: str | None,
                  session_token: str, verifier: BadgeVerifier, server_id: str,
                  transport_peer: Callable[[], TransportPeer | None] | None = None,
-                 peer_binding: PeerBinding | None = None):
+                 peer_binding: PeerBinding | None = None, server_role: str = SERVER_ROLE):
         if (transport_peer is None) != (peer_binding is None):
             raise ValueError("pass both transport_peer and peer_binding, or neither")
+        self.server_role = server_role      # P5c: agents are servers too (e.g. role "reader")
         self.transport_peer = transport_peer
         self.peer_binding = peer_binding
         self.client = client
@@ -74,9 +75,9 @@ class TrustedClient:
             ident = self.verifier.verify(badge, self.server_id)
         except BadgeError as e:
             raise ServerAuthError(f"MCP server {self.server_id!r} not trusted: {e}") from None
-        if ident.role != SERVER_ROLE:
+        if ident.role != self.server_role:
             raise ServerAuthError(
-                f"{self.server_id!r} badge has role {ident.role!r}, not {SERVER_ROLE!r}")
+                f"{self.server_id!r} badge has role {ident.role!r}, not {self.server_role!r}")
         if self.peer_binding is not None:
             try:
                 r = self.peer_binding.check(self.transport_peer(), ident)

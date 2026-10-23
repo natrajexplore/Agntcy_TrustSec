@@ -117,7 +117,9 @@ tests/                 # pytest — must stay green
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.
 - [ ] **P5 Domain** — design `docs/P5-design.md` (approved: E1–E5). P5a done: RuleGate core
       vendored as `review/`, `review_change` runs it (78 ported RuleGate tests pass). P5b done:
-      `agents/runtime.py` + `agents/reader.py` (live through the real gateway). Next: P5c intake. Real agents: intake, reader (pyATS / mock), reviewer (port the
+      `agents/runtime.py` + `agents/reader.py` (live through the real gateway). P5c1 done: intake
+      (seal + deterministic plan + dispatch) and reader job server behind a caller gate
+      (`agents/jobserver.py`, only intake may dispatch). Next: P5c2/P5d reviewer + executor. Real agents: intake, reader (pyATS / mock), reviewer (port the
       CrewAI Palo Alto / FTD change reviewer), executor. Add the rogue agent.
 - [ ] **P6 Observe & benchmark** — dashboard of ALLOW/BLOCK decisions; latency and
       block-rate numbers (optionally via `outshift-open/mas-lab`); README diagrams.

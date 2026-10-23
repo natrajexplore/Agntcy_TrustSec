@@ -150,25 +150,58 @@ def test_legitimate_change_judged_by_local_llm(audit_path):
     assert "semantic: llm allow" in rec["checks"][-1]["reason"], rec["checks"][-1]
 
 
-# --- P5b: the real reader agent process ----------------------------------------------------
+# --- P5b/P5c1: real agent processes — intake dispatches to the reader job server -----------
 
-def reader_cli(tool, args, prompt):
-    out = subprocess.run([sys.executable, "-m", "agenttrustsec.agents.reader", "--tool", tool,
-                          "--args", json.dumps(args), "--prompt", prompt], env=ENV,
-                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
-    line = next((ln for ln in reversed(out.stdout.splitlines()) if ln.startswith("{")), None)
-    assert line, f"reader produced no result: {out.stdout[-600:]} {out.stderr[-600:]}"
-    return json.loads(line)
+@pytest.fixture(scope="module")
+def reader_audit(tmp_path_factory):
+    return tmp_path_factory.mktemp("reader") / "dispatch.jsonl"
 
 
-def test_reader_agent_reads_acl_through_the_gateway(audit_path):
-    r = reader_cli("show_acl", ACL, "Audit the ACLs on edge-fw-01 for any permit-any rules")
-    assert r["ok"] and "permit ip any any" in r["result"], r
-    rec = last_audit(audit_path)
-    assert rec["verdict"] == "ALLOW" and rec["agent_id"] == READER and rec["tool"] == "show_acl"
+@pytest.fixture(scope="module")
+def reader_server(gateway, reader_audit):
+    proc = subprocess.Popen([sys.executable, "-m", "agenttrustsec.agents.reader", "serve",
+                             "--audit", str(reader_audit)], env=ENV, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        line = proc.stdout.readline()
+        if line.startswith("READY reader-01"):
+            break
+        if proc.poll() is not None:
+            pytest.fail(f"reader exited: {proc.stdout.read()[-800:]}")
+    yield proc
+    proc.terminate()
+    proc.wait(10)
 
 
-def test_reader_agent_out_of_scope_target_blocked_by_gate():
-    r = reader_cli("show_acl", {"device": "edge-fw-02"}, "Audit the ACLs on edge-fw-01")
-    assert r == {"ok": False, "blocked_by": "intent",
-                 "reason": "scope: device='edge-fw-02' is not named in the request"}, r
+def run_json(*argv):
+    out = subprocess.run([sys.executable, *argv], env=ENV, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", timeout=120)
+    line = next((ln for ln in reversed(out.stdout.splitlines())
+                 if ln.startswith("{") or ln.startswith("RESULT ")), None)
+    assert line, f"no result: {out.stdout[-600:]} {out.stderr[-600:]}"
+    return json.loads(line[7:] if line.startswith("RESULT ") else line)
+
+
+def test_intake_dispatches_read_to_reader_through_the_gateway(reader_server, reader_audit, audit_path):
+    r = run_json("-m", "agenttrustsec.agents.intake", "Audit the ACLs on edge-fw-01 for any permit-any rules")
+    assert r["ok"] and r["plan"]["tool"] == "show_acl", r
+    assert "permit ip any any" in r["worker_result"]["result"]
+    gw = last_audit(audit_path)                                     # gateway: the reader's call
+    assert gw["verdict"] == "ALLOW" and gw["agent_id"] == READER and gw["tool"] == "show_acl"
+    disp = json.loads(reader_audit.read_text().splitlines()[-1])    # reader: intake's dispatch
+    assert disp["verdict"] == "ALLOW" and disp["tool"] == "dispatch.run_job"
+    assert "session" not in disp["args"]                            # forwarded token never logged
+
+
+def test_rogue_dispatch_to_reader_is_refused(reader_server, reader_audit):
+    # executor-01: real badge, real key, mutual auth OK — but not allowed to give the reader work
+    r = run_json(str(ROOT / "tests" / "_dispatch_child.py"), "executor-01")
+    assert r.get("blocked_by") == "caller" and "may not dispatch" in r["reason"], r
+    disp = json.loads(reader_audit.read_text().splitlines()[-1])
+    assert disp["verdict"] == "BLOCK" and disp["blocked_by"] == "caller"
+
+
+def test_intake_refuses_what_it_cannot_plan():
+    r = run_json("-m", "agenttrustsec.agents.intake", "Compare the ACLs on edge-fw-01 and edge-fw-02")
+    assert r["ok"] is False and "cannot plan" in r["error"], r

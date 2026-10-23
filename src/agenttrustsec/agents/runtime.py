@@ -80,18 +80,31 @@ class AgentRuntime:
         return AgntcyBadgeVerifier(load_role_map(IDENTITIES, "mcp_servers"), badge_type=MCP_SERVER_BADGE,
                                    key_thumbprints=load_key_thumbprints(IDENTITIES))
 
+    def agent_verifier(self) -> AgntcyBadgeVerifier:
+        return AgntcyBadgeVerifier(load_role_map(IDENTITIES, "agents"),
+                                   key_thumbprints=load_key_thumbprints(IDENTITIES))
+
+    def peer_binding(self) -> PeerBinding:
+        return PeerBinding(self._trust)
+
     @asynccontextmanager
-    async def gateway(self, session_token: str) -> AsyncIterator[Any]:
-        """A TrustedClient to the gateway over an MLS SLIM session, with mutual peer checks."""
+    async def peer_client(self, peer_id: str, peer_role: str, verifier: AgntcyBadgeVerifier,
+                          session_token: str = "") -> AsyncIterator[Any]:
+        """A TrustedClient to another party (gateway or agent) over an MLS SLIM session; the
+        peer must present a badge with `peer_role` AND prove it holds that badge's key."""
         from mcp import Client
 
         from agenttrustsec.mcpgate.client import TrustedClient
         from agenttrustsec.transport import slim
         if self.endpoint is None:
             raise RuntimeError("call start() first")
-        transport = slim.SlimClientTransport(self.endpoint, slim_name(self.cfg.gateway_id))
+        transport = slim.SlimClientTransport(self.endpoint, slim_name(peer_id))
         async with Client(transport) as c:
             yield TrustedClient(c, agent_id=self.cfg.metadata_id, badge=self.badge,
-                                session_token=session_token, verifier=self.server_verifier(),
-                                server_id=self.cfg.gateway_id, transport_peer=lambda: transport.peer,
-                                peer_binding=PeerBinding(self._trust))
+                                session_token=session_token, verifier=verifier, server_id=peer_id,
+                                transport_peer=lambda: transport.peer,
+                                peer_binding=self.peer_binding(), server_role=peer_role)
+
+    def gateway(self, session_token: str):
+        """TrustedClient to the gated MCP gateway (role mcp_server)."""
+        return self.peer_client(self.cfg.gateway_id, "mcp_server", self.server_verifier(), session_token)

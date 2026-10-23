@@ -1,21 +1,19 @@
-"""reader-01 (P5b): runs read-only jobs through the gated gateway.
+"""reader-01 (P5b/P5c): a worker agent that runs read-only jobs through the gated gateway.
 
-A job is `{tool, args}` — turning the engineer's words into a job is intake's work (P5c).
-The reader only attempts tools its role is allowed in policies/tbac.yaml (defence in depth:
-the gate still decides every call, and audits it).
+Serve mode (P5c): a long-running process on SLIM (dials OUT, no port) exposing one MCP tool,
+`run_job(tool, args, session)`, behind the caller gate — only a verified `intake` agent may
+dispatch (agents/jobserver.py). The job's sealed session (from intake) is forwarded to the
+gateway, which still checks badge -> peer -> TBAC -> intent and audits the call.
+The reader only attempts tools its TBAC role allows (defence in depth; the gate decides).
 
-One-shot CLI (lab; the session is sealed by the intake stand-in, AGENTTRUSTSEC_BROKER_KEY):
-
-    python -m agenttrustsec.agents.reader --tool show_acl --args '{"device": "edge-fw-01"}' \\
-        --prompt "Audit the ACLs on edge-fw-01 for any permit-any rules"
+    python -m agenttrustsec.agents.reader serve [--audit audit/reader-dispatch.jsonl]
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
-import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from agenttrustsec.agents.runtime import ROOT, AgentRuntime, load_agent, result_body
@@ -23,6 +21,7 @@ from agenttrustsec.authz.tbac import TbacPolicy
 
 NAME = "reader-01"
 ROLE = "reader"
+DISPATCHERS = frozenset({"intake"})
 
 
 class NotAReadTool(PermissionError):
@@ -46,36 +45,39 @@ async def run_job(rt: AgentRuntime, session_token: str, tool: str, args: dict[st
     raise err
 
 
-def seal_lab_session(prompt: str, intent: str = "read") -> str:
-    """Lab intake stand-in until P5c: seal with the shared broker key."""
-    from agenttrustsec.authz.broker import TokenBroker
-    from agenttrustsec.models import Intent, Session
-    key = os.environ.get("AGENTTRUSTSEC_BROKER_KEY")
-    if not key:
-        raise SystemExit("AGENTTRUSTSEC_BROKER_KEY is not set (lab intake stand-in)")
-    return TokenBroker(bytes.fromhex(key)).seal_session(Session(prompt, Intent(intent)))
-
-
-async def main_async(argv: list[str] | None = None) -> int:
+def job_tool(rt: AgentRuntime):
     from agenttrustsec.mcpgate.client import McpBlocked, ServerAuthError
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--tool", required=True)
-    ap.add_argument("--args", default="{}", help="JSON object of tool arguments")
-    ap.add_argument("--prompt", required=True, help="the engineer's request (sealed into the session)")
-    a = ap.parse_args(argv)
+
+    async def run_job_tool(tool: str, args: dict, session: str) -> dict:
+        """Run one read-only job through the gateway with the forwarded sealed session."""
+        try:
+            return {"ok": True, "result": await run_job(rt, session, tool, args)}
+        except McpBlocked as e:
+            return {"ok": False, "blocked_by": e.blocked_by, "reason": e.reason}
+        except (ServerAuthError, NotAReadTool) as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    return run_job_tool
+
+
+async def serve(audit_path: Path) -> None:
+    from agenttrustsec.agents.jobserver import build_job_server
+    from agenttrustsec.audit.log import AuditLog
+    from agenttrustsec.transport import slim
     rt = await AgentRuntime(load_agent(NAME)).start()
-    try:
-        out = {"ok": True, "result": await run_job(rt, seal_lab_session(a.prompt), a.tool, json.loads(a.args))}
-    except McpBlocked as e:
-        out = {"ok": False, "blocked_by": e.blocked_by, "reason": e.reason}
-    except (ServerAuthError, NotAReadTool) as e:
-        out = {"ok": False, "error": f"{type(e).__name__}: {e}"}
-    print(json.dumps(out, default=str), flush=True)
-    return 0 if out["ok"] else 1
+    server = build_job_server(NAME, rt.badge, rt.agent_verifier(), rt.peer_binding(), DISPATCHERS,
+                              AuditLog(audit_path), {"run_job": job_tool(rt)})
+    print(f"READY {NAME} as {rt.cfg.metadata_id}; dispatch allowed for {sorted(DISPATCHERS)}", flush=True)
+    await slim.serve_slim(server, rt.endpoint)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return asyncio.run(main_async(argv))
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("serve", help="run as a job server on SLIM")
+    s.add_argument("--audit", type=Path, default=ROOT / "audit" / "reader-dispatch.jsonl")
+    a = ap.parse_args(argv)
+    asyncio.run(serve(a.audit))
+    return 0
 
 
 if __name__ == "__main__":

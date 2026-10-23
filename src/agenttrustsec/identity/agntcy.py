@@ -71,6 +71,19 @@ def _payload(jose: str) -> dict:
     return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
 
 
+def fetch_current_badge(node_http: str, subject: str, timeout: float = 5.0) -> str:
+    """An agent's own current badge: a published copy for `subject` that is NOT revoked.
+    No such copy -> BadgeError (an agent never presents a revoked or missing badge)."""
+    import urllib.request
+    url = f"{node_http}/v1alpha1/vc/{subject}/.well-known/vcs.json"
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        published = [v["value"] for v in json.load(r).get("vcs") or []]
+    live = [j for j in published if not _payload(j).get("credentialStatus")]
+    if not live:
+        raise BadgeError(f"no unrevoked published badge for {subject!r}")
+    return live[0]
+
+
 def load_role_map(path: str | Path, section: str) -> dict[str, str]:
     raw = yaml.safe_load(Path(path).read_text()) or {}
     entries = raw.get(section) or {}

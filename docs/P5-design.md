@@ -96,11 +96,28 @@ any/any → REJECT, score 100 (fail-safe).
 `review_change` signature/description make that inventory stale until the badge is re-issued
 (nothing checks drift yet — backlog item).
 
+## 5c. P5b as built (2026-10-25)
+
+* `lab/agents.yaml`: agent name → badge subject + gateway (public ids; a test checks each id
+  has the expected role in `policies/identities.yaml`).
+* `identity/agntcy.py::fetch_current_badge`: the agent's own **unrevoked** published badge;
+  none → `BadgeError` (an agent never presents a revoked or missing badge).
+* `agents/runtime.py::AgentRuntime`: key from `~/.agenttrustsec/keys/`, badge from the node,
+  dials OUT to SLIM under its own name, `gateway(session)` = MLS session + `TrustedClient`
+  with mutual peer checks on the gateway.
+* `agents/reader.py`: runs `{tool, args}` jobs; refuses tools its role isn't allowed in TBAC
+  (before any gateway contact); one-shot CLI with the lab intake stand-in.
+* Live (real gateway): reader reads `show_acl` → ALLOW, audited under reader-01's id; reader
+  asking for an unnamed device → gate `intent` scope BLOCK, reported cleanly. Full suite
+  379 passed with the lab up.
+* Bug found on the way: an MCP error raised inside the client's task group arrives as an
+  ExceptionGroup; agents capture and re-raise outside it (same pattern as the test children).
+
 ## 6. Work order (one PR each)
 
 * **P5a** ✅ vendor RuleGate core → `review/`; `review_change` uses it; tests incl. RuleGate's
   own sample CRs (CR-1003 any/any must be rejected).
-* **P5b** agent runtime (identity, SLIM endpoint, `TrustedClient`) + `reader-01` + CLI.
+* **P5b** ✅ agent runtime (identity, SLIM endpoint, `TrustedClient`) + `reader-01` + CLI.
 * **P5c** `intake-01`: session sealing, intent, routing, reviewer-group moderation.
 * **P5d** `reviewer-01` + `executor-01` + approval token (E3) in broker and gate.
 * **P5e** rogue scenarios + one end-to-end demo script on the live lab; README walkthrough.

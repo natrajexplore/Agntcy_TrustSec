@@ -1,0 +1,12 @@
+# Lab agent registry (P5b): agent name -> its badge subject (AGNTCY metadata id) and gateway.
+# PUBLIC data only — badges are published on the Identity Node; private keys stay in
+# ~/.agenttrustsec/keys/<name>.pem and never enter the repo. Roles live in
+# policies/identities.yaml (the authorization map), not here.
+gateway:
+  name: netops-mcp
+  metadata_id: AGNTCY-2e3bc5c0-7bc2-4c5f-a055-ff6ae74d0add
+agents:
+  intake-01:   AGNTCY-7787aa23-dfa1-4600-b664-0c728b88fd27
+  reader-01:   AGNTCY-13cbc3cf-89ae-43d6-b5b4-b0681092b8fb
+  reviewer-01: AGNTCY-c55ca3ee-802d-4209-8352-343197d644ae
+  executor-01: AGNTCY-f3f8503b-43e7-4cd1-8822-2ff32a78db84

@@ -148,3 +148,27 @@ def test_legitimate_change_judged_by_local_llm(audit_path):
     rec = last_audit(audit_path)
     assert rec["verdict"] == "ALLOW" and rec["tool"] == "push_config"
     assert "semantic: llm allow" in rec["checks"][-1]["reason"], rec["checks"][-1]
+
+
+# --- P5b: the real reader agent process ----------------------------------------------------
+
+def reader_cli(tool, args, prompt):
+    out = subprocess.run([sys.executable, "-m", "agenttrustsec.agents.reader", "--tool", tool,
+                          "--args", json.dumps(args), "--prompt", prompt], env=ENV,
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    line = next((ln for ln in reversed(out.stdout.splitlines()) if ln.startswith("{")), None)
+    assert line, f"reader produced no result: {out.stdout[-600:]} {out.stderr[-600:]}"
+    return json.loads(line)
+
+
+def test_reader_agent_reads_acl_through_the_gateway(audit_path):
+    r = reader_cli("show_acl", ACL, "Audit the ACLs on edge-fw-01 for any permit-any rules")
+    assert r["ok"] and "permit ip any any" in r["result"], r
+    rec = last_audit(audit_path)
+    assert rec["verdict"] == "ALLOW" and rec["agent_id"] == READER and rec["tool"] == "show_acl"
+
+
+def test_reader_agent_out_of_scope_target_blocked_by_gate():
+    r = reader_cli("show_acl", {"device": "edge-fw-02"}, "Audit the ACLs on edge-fw-01")
+    assert r == {"ok": False, "blocked_by": "intent",
+                 "reason": "scope: device='edge-fw-02' is not named in the request"}, r

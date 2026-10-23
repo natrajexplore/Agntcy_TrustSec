@@ -1,0 +1,96 @@
+# AgentTrustSec CI — unit tests + secret scan on every push to main and every pull request.
+#
+# Runs on GitHub-hosted runners. To run it locally first, use `act` (nektos/act):
+#
+#   docker network create act-isolated        # once
+#   act -P ubuntu-latest=catthehacker/ubuntu:act-latest --network act-isolated
+#
+# --network act-isolated matters: by default act's containers can reach services on this
+# PC's localhost, so live tests would hit the running lab instead of skipping —
+# unlike GitHub's runner. Isolated, it matches GitHub (counts in the PR that last ran it).
+#
+# Security posture (owner's do's / don'ts, 2026-10-23):
+#   * GitHub-hosted runners only — NEVER a self-hosted runner on the lab PC (agent keys,
+#     ~/.agenttrustsec/pki/ca.key and the issuer vault live there; this repo is public).
+#   * No secrets: CI holds no lab keys, broker key, vault or PKI (CLAUDE.md rule 5). Tests
+#     generate throwaway keys; live tests (Identity Node, SLIM node, agent keys, Ollama) skip.
+#   * `pull_request`, never `pull_request_target`: fork code runs with no secrets, read-only token.
+#   * Least privilege: `contents: read`; actions pinned to full commit SHAs (tags can move).
+#   * Skips are guarded: only "lab absent" reasons are allowed — an import failure or any new
+#     skip reason fails the build instead of hiding as a skip. Never add continue-on-error,
+#     -k filters or skip markers to get green (CLAUDE.md rule 2).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]     # pyproject: requires-python >= 3.10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065   # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install project with all extras (imports must resolve; lab stays absent)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,agntcy,slim]"
+
+      - name: Unit tests (live tests skip without the lab)
+        run: python -m pytest -q -rs --junitxml=junit.xml
+
+      - name: Skip guard (only "lab absent" skips are allowed)
+        run: |
+          python - <<'EOF'
+          import re, sys, xml.etree.ElementTree as ET
+          ALLOWED = [r"lab Identity Node not running", r"needs the live lab",
+                     r"needs lab SLIM node, lab Identity Node and the lab (agent )?keys",
+                     r"lab SLIM node / lab keys missing", r"revoke-test-01 not on this node"]
+          MAX_SKIPS = 80                      # a mass skip is a failure, not a pass
+          cases = list(ET.parse("junit.xml").getroot().iter("testcase"))
+          skipped = [(c.get("classname"), c.get("name"), (s.get("message") or ""))
+                     for c in cases for s in c.findall("skipped")]
+          bad = [x for x in skipped if not any(re.search(p, x[2]) for p in ALLOWED)]
+          ran = len(cases) - len(skipped)
+          print(f"{ran} ran, {len(skipped)} skipped (lab absent)")
+          for cls, name, msg in bad:
+              print(f"NOT ALLOWED: {cls}::{name}: {msg}")
+          if bad or len(skipped) > MAX_SKIPS or ran == 0:
+              sys.exit(f"skip guard failed: {len(bad)} unexpected skip(s), {len(skipped)} total (max {MAX_SKIPS})")
+          EOF
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          fetch-depth: 0                     # scan the whole history, not just the tip
+          persist-credentials: false
+
+      - name: gitleaks 8.30.1 (pinned binary, checksum verified)
+        env:
+          VERSION: 8.30.1
+          SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git --redact --no-banner --exit-code 1 .

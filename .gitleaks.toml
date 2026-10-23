@@ -1,0 +1,21 @@
+# gitleaks config for CI (.github/workflows/ci.yml). Default rules stay ON. Only reviewed PUBLIC
+# values are allowlisted, each scoped to ONE rule + exact file + exact shape (targetRules), so any
+# other secret in the same files is still caught — verified with planted fake tokens. A broader
+# path/regex allowlist silenced every rule in those files (tested), so keep entries rule-scoped.
+# Review every new entry like a policy change.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "RFC 7638 thumbprints of agent PUBLIC keys, signed into the badges (P3 PR1)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+regexes = ['''agenttrustsec\.key_thumbprint"?\s*[:=]\s*"[A-Za-z0-9_-]{43}"''']
+paths = ['''^lab/identity/oasf/[a-z0-9-]+\.json$''']
+
+[[allowlists]]
+description = "Published, revoked throwaway badge (revoke-test-01) — revocation-replay test fixture (P2)"
+targetRules = ["jwt"]
+paths = ['''^tests/fixtures/revoke-test-01\.original\.jose$''']

@@ -1,0 +1,15 @@
+{# Vendored from RuleGate (crewai_fw_chg_reviewer @ 6ce533b), unchanged. #}
+// RuleGate staged FMC payload - {{ cr.change_id }} (policy: {{ cr.target.device_group or "UNKNOWN" }})
+// NOT APPLIED. For human review; create the rule in FMC (UI or API) and deploy through the normal change process.
+// Remove these comment lines before using the JSON body.
+// Method:   POST
+// Endpoint: {{ endpoint }}
+{% if section in ("mandatory", "default") %}
+// Query:    ?section={{ section }}{% if shadow.move_before %}&insertBefore=<ruleIndex of '{{ shadow.move_before }}'>{% endif %}
+
+{% else %}
+// Query:    (prefilter rule){% if shadow.move_before %} ?insertBefore=<ruleIndex of '{{ shadow.move_before }}'>{% endif %}
+
+{% endif %}
+// Replace every <UUID ...> placeholder with the object UUID from GET calls (read-only user is sufficient for lookups).
+{{ payload | json }}

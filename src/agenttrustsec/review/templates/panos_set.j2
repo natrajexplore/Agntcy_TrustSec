@@ -1,0 +1,27 @@
+{# Vendored from RuleGate (crewai_fw_chg_reviewer @ 6ce533b), unchanged. #}
+# RuleGate staged configuration - {{ cr.change_id }} ({{ cr.target.device_group or "standalone firewall" }})
+# NOT APPLIED. Review, then apply through the normal change process (candidate config -> commit -> push).
+# Ticket: {{ cr.ticket_ref or "MISSING" }} | Requester: {{ cr.requester or "MISSING" }}
+{% for o in service_objects %}
+set {{ obj_scope }}service {{ o.name }} protocol {{ o.proto }} port {{ o.ports }}
+{% endfor %}
+set {{ scope }} security rules {{ name }} from [ {{ req.source_zone | join(" ") }} ]
+set {{ scope }} security rules {{ name }} to [ {{ req.destination_zone | join(" ") }} ]
+set {{ scope }} security rules {{ name }} source [ {{ req.source | join(" ") }} ]
+set {{ scope }} security rules {{ name }} destination [ {{ req.destination | join(" ") }} ]
+{% if req.users %}
+set {{ scope }} security rules {{ name }} source-user [ {{ req.users | join(" ") }} ]
+{% endif %}
+set {{ scope }} security rules {{ name }} application [ {{ req.application | join(" ") }} ]
+set {{ scope }} security rules {{ name }} service [ {{ services | join(" ") }} ]
+set {{ scope }} security rules {{ name }} action {{ req.action if req.action == "allow" else "deny" }}
+{% if req.security_profile_group %}
+set {{ scope }} security rules {{ name }} profile-setting group {{ req.security_profile_group }}
+{% endif %}
+set {{ scope }} security rules {{ name }} log-end {{ "yes" if req.logging else "no" }}
+set {{ scope }} security rules {{ name }} description "{{ cr.change_id }} {{ cr.ticket_ref or '' }}{% if cr.expiry %} expires {{ cr.expiry }}{% endif %}"
+{% if shadow.move_before %}
+move {{ scope }} security rules {{ name }} before {{ shadow.move_before }}
+{% else %}
+move {{ scope }} security rules {{ name }} bottom
+{% endif %}

@@ -1,0 +1,18 @@
+{
+  "vendor": "ftd",
+  "filename": "staged_config.fmc.json",
+  "rule_name": "CR-2002-inside-to-dc",
+  "config": "// RuleGate staged FMC payload - CR-2002 (policy: DC-Edge-ACP)\n// NOT APPLIED. For human review; create the rule in FMC (UI or API) and deploy through the normal change process.\n// Remove these comment lines before using the JSON body.\n// Method:   POST\n// Endpoint: /api/fmc_config/v1/domain/{domainUUID}/policy/accesspolicies/{accessPolicyUUID}/accessrules\n// Query:    ?section=mandatory\n// Replace every <UUID ...> placeholder with the object UUID from GET calls (read-only user is sufficient for lookups).\n{\n  \"name\": \"CR-2002-inside-to-dc\",\n  \"type\": \"AccessRule\",\n  \"action\": \"TRUST\",\n  \"enabled\": true,\n  \"sourceZones\": {\n    \"objects\": [\n      {\n        \"name\": \"inside\",\n        \"type\": \"SecurityZone\",\n        \"id\": \"<UUID of zone inside>\"\n      }\n    ]\n  },\n  \"destinationZones\": {\n    \"objects\": [\n      {\n        \"name\": \"dc\",\n        \"type\": \"SecurityZone\",\n        \"id\": \"<UUID of zone dc>\"\n      }\n    ]\n  },\n  \"sourceNetworks\": {\n    \"literals\": [\n      {\n        \"type\": \"Network\",\n        \"value\": \"10.10.200.0/28\"\n      }\n    ]\n  },\n  \"destinationNetworks\": {\n    \"literals\": [\n      {\n        \"type\": \"Network\",\n        \"value\": \"10.60.6.0/24\"\n      }\n    ]\n  },\n  \"destinationPorts\": {\n    \"literals\": [\n      {\n        \"type\": \"PortLiteral\",\n        \"protocol\": \"6\",\n        \"port\": \"2049\"\n      },\n      {\n        \"type\": \"PortLiteral\",\n        \"protocol\": \"17\",\n        \"port\": \"2049\"\n      }\n    ]\n  },\n  \"logBegin\": false,\n  \"logEnd\": true,\n  \"sendEventsToFMC\": true\n}\n",
+  "test_plan": [
+    "PRE-CHANGE (FTD CLI, read-only diagnostic): packet-tracer input <ingress-interface-for-inside> tcp 10.10.200.1 54321 10.60.6.1 2049 detail",
+    "PRE-CHANGE (FTD CLI, read-only diagnostic): packet-tracer input <ingress-interface-for-inside> udp 10.10.200.1 54321 10.60.6.1 2049 detail",
+    "POST-CHANGE (expect match on rule CR-2002-inside-to-dc): packet-tracer input <ingress-interface-for-inside> tcp 10.10.200.1 54321 10.60.6.1 2049 detail",
+    "POST-CHANGE (expect match on rule CR-2002-inside-to-dc): packet-tracer input <ingress-interface-for-inside> udp 10.10.200.1 54321 10.60.6.1 2049 detail",
+    "POST-CHANGE: verify Connection Events in FMC show the new rule with end-of-connection logging."
+  ],
+  "rollback": [
+    "DELETE /api/fmc_config/v1/domain/{domainUUID}/policy/accesspolicies/{accessPolicyUUID}/accessrules/<UUID of rule CR-2002-inside-to-dc> (via FMC UI or API, by an engineer with change approval)",
+    "Deploy the policy to the affected FTD devices from FMC",
+    "Re-run the packet-tracer test and confirm the previous behaviour is restored"
+  ]
+}

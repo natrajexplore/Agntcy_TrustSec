@@ -1,0 +1,15 @@
+{
+  "vendor": "panos",
+  "filename": "staged_config.set",
+  "rule_name": "CR-1006-app-trust-to-db-trust",
+  "config": "# RuleGate staged configuration - CR-1006 (DC-Core)\n# NOT APPLIED. Review, then apply through the normal change process (candidate config -> commit -> push).\n# Ticket: MISSING | Requester: dba-team\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust from [ app-trust ]\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust to [ db-trust ]\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust source [ 10.30.10.0/24 ]\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust destination [ 10.40.10.15 ]\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust application [ ssh ]\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust service [ application-default ]\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust action allow\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust profile-setting group Strict-Inspection\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust log-end no\nset device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust description \"CR-1006 \"\nmove device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust bottom\n",
+  "test_plan": [
+    "PRE-CHANGE (expect current behaviour, see shadow analysis): test security-policy-match from app-trust to db-trust source 10.30.10.1 destination 10.40.10.15 protocol 6 destination-port <port> application ssh",
+    "POST-CHANGE (expect match on rule CR-1006-app-trust-to-db-trust): test security-policy-match from app-trust to db-trust source 10.30.10.1 destination 10.40.10.15 protocol 6 destination-port <port> application ssh",
+    "POST-CHANGE: confirm traffic log entries for the rule (log-end) and zero threat-log drops for legitimate flows."
+  ],
+  "rollback": [
+    "delete device-group DC-Core pre-rulebase security rules CR-1006-app-trust-to-db-trust",
+    "commit; push to device group (Panorama) through the normal change process"
+  ]
+}

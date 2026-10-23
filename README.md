@@ -114,14 +114,14 @@ sequenceDiagram
     participant X as executor-01
     participant G as Gateway (Gate)
     E->>I: "Add a rule on edge-fw-01 ... (CR-1001)" + change file
-    I->>I: intent = change, seal session, build proposal (device, exact lines, CR)
+    I->>I: intent = change, seal session, render lines from the CR (RuleGate), build proposal
     I->>R: invite to MLS group, moderator hello (badge)
     R->>R: verify intake: badge, key, moderator role
     R->>I: attest (badge) - admitted only if badge + key + group policy pass
     I->>R: broadcast proposal + sealed READ session for the review
     R->>G: review_change(device, CR)
     G-->>R: RuleGate verdict (badge, peer, tbac, intent checked + audited)
-    R->>I: reply: approve only if APPROVE, no human review, same lines digest
+    R->>I: reply: approve only if APPROVE, no human review, lines = gateway's rendering
     alt every admitted reviewer approved
         I->>I: mint single-use approval (change id + device + lines + session)
         I->>X: run_change(device, lines, session, approval) - caller gate: intake only
@@ -243,8 +243,10 @@ RESULT: all expectations met
 ```
 
 How a change flows: intake seals a `change` session, opens an **attested MLS group** of the
-reviewers and broadcasts the proposal (device + exact lines + RuleGate change request).
-Each reviewer runs RuleGate's deterministic review **through the gateway** and replies. Only on a
+reviewers and broadcasts the proposal (device + RuleGate change request + the config lines
+intake **rendered from it** with RuleGate's deterministic PAN-OS / FMC renderer — a change file
+never carries its own lines). Each reviewer runs RuleGate's review **through the gateway**, which
+renders the lines again, and approves only if the proposed lines are exactly that rendering. Only on a
 unanimous clean `APPROVE` does intake mint the single-use approval and hand it to the executor,
 whose `push_config` still passes every gate check. Every step is audited (the run's trails land
 in `audit/demo-<time>/`: gateway, intake group admissions, each agent's dispatch log).
@@ -322,6 +324,7 @@ tests/                   unit tests + live tests against the lab
 | P4 | Intent: scope check + local LLM verifier for change tools, evaluated on ASTRA | ✅ |
 | P5 | Real agents: intake, reader, RuleGate PAN-OS / FTD reviewer group, executor with approval tokens, rogue; live demo | ✅ |
 | P6 | Per-check timing + benchmarks, decisions dashboard, README diagrams | ✅ (node admission control moved to the backlog) |
+| A | Change request → config: pushed lines rendered from the reviewed CR, cross-checked by reviewers | ✅ |
 
 ## Built on
 

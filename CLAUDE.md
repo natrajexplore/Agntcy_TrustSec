@@ -61,7 +61,7 @@ src/agenttrustsec/
   audit/log.py         # JSONL audit writer
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
-  review/              # P5a: RuleGate's deterministic firewall-change review core (no CrewAI/LLM)
+  review/              # P5a: RuleGate's deterministic review core (no CrewAI/LLM); render.py = CR -> lines (item A)
   agents/              # P5: runtime.py, jobserver.py (caller gate), intake/reader/reviewer/executor/rogue.py
   transport/slim.py    # MCP over SLIM (MLS P2P); reports + pins the peer, gate decides
   transport/slim_group.py # Attested MLS group sessions: admission gate before any broadcast
@@ -71,7 +71,7 @@ policies/groups.yaml   # Who may moderate / join each SLIM group channel
 policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
 policies/trust-jwks.json # PUBLIC keys SLIM may accept (binding enforced by the peer check)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
-lab/changes/           # Change orders (device + exact lines + RuleGate CR) for the change path
+lab/changes/           # Change orders (device + RuleGate CR; lines are rendered, never in the file)
 lab/identity/          # Lab Identity Node compose, OASF records, revoke_badge.py
 eval/                  # ASTRA-based evaluation of the intent checker
 tests/                 # pytest — must stay green

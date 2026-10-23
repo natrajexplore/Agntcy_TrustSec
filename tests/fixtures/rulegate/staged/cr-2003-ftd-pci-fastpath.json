@@ -1,0 +1,16 @@
+{
+  "vendor": "ftd",
+  "filename": "staged_config.fmc.json",
+  "rule_name": "CR-2003-inside-to-pci",
+  "config": "// RuleGate staged FMC payload - CR-2003 (policy: DC-Edge-ACP)\n// NOT APPLIED. For human review; create the rule in FMC (UI or API) and deploy through the normal change process.\n// Remove these comment lines before using the JSON body.\n// Method:   POST\n// Endpoint: /api/fmc_config/v1/domain/{domainUUID}/policy/prefilterpolicies/{prefilterPolicyUUID}/prefilterrules\n// Query:    (prefilter rule)\n// Replace every <UUID ...> placeholder with the object UUID from GET calls (read-only user is sufficient for lookups).\n{\n  \"name\": \"CR-2003-inside-to-pci\",\n  \"type\": \"PrefilterRule\",\n  \"action\": \"FASTPATH\",\n  \"enabled\": true,\n  \"sourceInterfaces\": {\n    \"objects\": [\n      {\n        \"name\": \"inside\",\n        \"type\": \"SecurityZone\",\n        \"id\": \"<UUID of zone inside>\"\n      }\n    ]\n  },\n  \"destinationInterfaces\": {\n    \"objects\": [\n      {\n        \"name\": \"pci\",\n        \"type\": \"SecurityZone\",\n        \"id\": \"<UUID of zone pci>\"\n      }\n    ]\n  },\n  \"sourceNetworks\": {\n    \"literals\": [\n      {\n        \"type\": \"Network\",\n        \"value\": \"10.10.50.0/24\"\n      }\n    ]\n  },\n  \"destinationNetworks\": {\n    \"literals\": [\n      {\n        \"type\": \"Host\",\n        \"value\": \"10.70.0.20\"\n      }\n    ]\n  },\n  \"destinationPorts\": {\n    \"literals\": [\n      {\n        \"type\": \"PortLiteral\",\n        \"protocol\": \"6\",\n        \"port\": \"8583\"\n      }\n    ]\n  },\n  \"logBegin\": false,\n  \"logEnd\": true,\n  \"sendEventsToFMC\": true\n}\n",
+  "test_plan": [
+    "PRE-CHANGE (FTD CLI, read-only diagnostic): packet-tracer input <ingress-interface-for-inside> tcp 10.10.50.1 54321 10.70.0.20 8583 detail",
+    "POST-CHANGE (expect match on rule CR-2003-inside-to-pci): packet-tracer input <ingress-interface-for-inside> tcp 10.10.50.1 54321 10.70.0.20 8583 detail",
+    "POST-CHANGE: verify Connection Events in FMC show the new rule with end-of-connection logging."
+  ],
+  "rollback": [
+    "DELETE /api/fmc_config/v1/domain/{domainUUID}/policy/prefilterpolicies/{prefilterPolicyUUID}/prefilterrules/<UUID of rule CR-2003-inside-to-pci> (via FMC UI or API, by an engineer with change approval)",
+    "Deploy the policy to the affected FTD devices from FMC",
+    "Re-run the packet-tracer test and confirm the previous behaviour is restored"
+  ]
+}

@@ -1,10 +1,8 @@
 # Lab change order (P5d): Any/any at the top of the rulebase: RuleGate REJECT -> no approval -> never pushed.
 # change = RuleGate change request (cr-1003-panos-any-any.yaml, target dropped: the device decides);
-# lines  = the exact config intake proposes, reviewers see and the approval token binds.
+# No lines here (item A): intake renders them from `change` with RuleGate; the gateway's
+# review_change renders them again and reviewers approve only if both match.
 device: edge-fw-01
-lines:
-- set rulebase security rules CR-1003 from web-dmz to any source any destination any application any service any action allow log-end yes
-- move rulebase security rules CR-1003 top
 change:
   change_id: CR-1003
   ticket_ref: CHG0045844

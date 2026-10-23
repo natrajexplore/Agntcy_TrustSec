@@ -10,7 +10,8 @@ Planner (deny by default): devices only from the lab inventory (whole tokens), I
 validated; exactly one tool group must match and its target must be present — anything else
 is refused.
 
-Change path (P5c2/P5d, needs --change-file: device + exact lines + RuleGate change request):
+Change path (P5c2/P5d, needs --change-file: device + RuleGate change request; the exact lines are
+rendered from the request by RuleGate, item A):
 intake moderates an attested MLS group of every registered reviewer (transport/slim_group.py),
 broadcasts the proposal with a read session sealed for the review, and collects replies. Only
 if EVERY admitted reviewer approves the same proposal + lines digest does intake mint a
@@ -106,6 +107,7 @@ class ChangeOrder:
     device: str
     lines: list[str]
     change: dict[str, Any]
+    rollback: list[str]
 
     @property
     def change_id(self) -> str:
@@ -114,23 +116,30 @@ class ChangeOrder:
 
 def load_change(path: Path, request: str) -> ChangeOrder:
     """Change file -> ChangeOrder. The device must be in the inventory AND be the one device the
-    request names (the gate's scope check would block it anyway; refuse before any contact)."""
+    request names (the gate's scope check would block it anyway; refuse before any contact).
+    The lines are RENDERED from the change request (RuleGate, review/render.py), never taken from
+    the file: a file that carries its own lines is refused."""
     import yaml
+    from agenttrustsec.review.engine import UnknownDevice, review_for_device, staged_lines
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(raw, dict) or set(raw) != {"device", "lines", "change"}:
-        raise PlanError("change file needs exactly: device, lines, change")
-    device, lines, change = raw["device"], raw["lines"], raw["change"]
+    if isinstance(raw, dict) and "lines" in raw:
+        raise PlanError("change file must not carry lines: they are rendered from the change request")
+    if not isinstance(raw, dict) or set(raw) != {"device", "change"}:
+        raise PlanError("change file needs exactly: device, change")
+    device, change = raw["device"], raw["change"]
     if device not in DEVICES:
         raise PlanError(f"device {device!r} is not in the lab inventory")
     if devices_in(request) != [device]:
         raise PlanError(f"the request must name exactly the change's device {device!r}, found "
                         f"{devices_in(request) or 'none'}")
-    if not isinstance(lines, list) or not lines or not all(isinstance(x, str) and x.strip() for x in lines):
-        raise PlanError("lines must be a non-empty list of config lines")
     if not isinstance(change, dict) or not change.get("change_id"):
         raise PlanError("change must be a RuleGate change request with a change_id")
     change = json.loads(json.dumps(change, default=str))      # dates -> ISO strings (JSON-safe)
-    return ChangeOrder(device, lines, change)
+    try:
+        staged = staged_lines(review_for_device(device, change))
+    except UnknownDevice as e:
+        raise PlanError(f"cannot render config: {e}") from None
+    return ChangeOrder(device, staged["lines"], change, staged["rollback"])
 
 
 def broker():
@@ -230,7 +239,8 @@ async def handle_change(request: str, change_path: Path, dry_run: bool = False,
         return {"ok": False, "intent": intent.value, "error": f"cannot plan: {e}"}
     out: dict = {"intent": intent.value, "change_id": order.change_id,
                  "plan": {"reviewers": reviewer_pool(), "worker": EXECUTOR, "tool": "push_config",
-                          "args": {"device": order.device, "lines": order.lines}}}
+                          "args": {"device": order.device, "lines": order.lines},
+                          "rollback": order.rollback}}
     if dry_run:
         return {"ok": True, **out}
     from agenttrustsec.agents.runtime import ROOT, AgentRuntime, load_agent, result_body
@@ -271,7 +281,7 @@ async def handle(request: str, dry_run: bool = False) -> dict:
     intent = classify_intent(request)
     if intent is Intent.CHANGE:
         return {"ok": False, "intent": intent.value,
-                "error": "change requests need --change-file (device, exact lines, RuleGate change request)"}
+                "error": "change requests need --change-file (device + RuleGate change request)"}
     try:
         job = plan(request)
     except PlanError as e:
@@ -293,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("request")
     ap.add_argument("--dry-run", action="store_true", help="classify and plan only")
-    ap.add_argument("--change-file", type=Path, help="change order: device, lines, RuleGate change request")
+    ap.add_argument("--change-file", type=Path, help="change order: device + RuleGate change request")
     ap.add_argument("--audit", type=Path, help="group admission audit (change path)")
     a = ap.parse_args(argv)
     if a.change_file:

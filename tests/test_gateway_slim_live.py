@@ -292,6 +292,8 @@ def test_clean_change_is_reviewed_approved_and_pushed(change_agents, agent_audit
     assert review["verdict"] == "ALLOW" and review["agent_id"] == REVIEWER
     push = recs[-1]
     assert push["tool"] == "push_config" and push["verdict"] == "ALLOW" and push["agent_id"] == EXECUTOR
+    from agenttrustsec.agents.intake import load_change                 # item A: pushed = rendered
+    assert push["args"]["lines"] == load_change(ROOT / "lab" / "changes" / "cr-1001.yaml", CHANGE_REQ).lines
     checks = {c["name"]: c for c in push["checks"]}
     assert checks["approval"]["status"] == "PASS" and "CR-1001" in checks["approval"]["reason"]
     assert "semantic: llm allow" in checks["intent"]["reason"]

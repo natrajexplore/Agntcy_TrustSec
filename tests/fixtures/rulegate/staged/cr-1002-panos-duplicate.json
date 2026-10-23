@@ -1,0 +1,16 @@
+{
+  "vendor": "panos",
+  "filename": "staged_config.set",
+  "rule_name": "CR-1002-web-dmz-to-app-trust",
+  "config": "# RuleGate staged configuration - CR-1002 (DC-Core)\n# NOT APPLIED. Review, then apply through the normal change process (candidate config -> commit -> push).\n# Ticket: CHG0045830 | Requester: app-team-portal\nset device-group DC-Core service tcp-8443 protocol tcp port 8443\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust from [ web-dmz ]\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust to [ app-trust ]\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust source [ 10.20.30.5 ]\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust destination [ 10.30.10.20 ]\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust application [ any ]\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust service [ tcp-8443 ]\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust action allow\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust profile-setting group Strict-Inspection\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust log-end yes\nset device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust description \"CR-1002 CHG0045830\"\nmove device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust bottom\n",
+  "test_plan": [
+    "PRE-CHANGE (expect current behaviour, see shadow analysis): test security-policy-match from web-dmz to app-trust source 10.20.30.5 destination 10.30.10.20 protocol 6 destination-port 8443",
+    "POST-CHANGE (expect match on rule CR-1002-web-dmz-to-app-trust): test security-policy-match from web-dmz to app-trust source 10.20.30.5 destination 10.30.10.20 protocol 6 destination-port 8443",
+    "POST-CHANGE: confirm traffic log entries for the rule (log-end) and zero threat-log drops for legitimate flows."
+  ],
+  "rollback": [
+    "delete device-group DC-Core pre-rulebase security rules CR-1002-web-dmz-to-app-trust",
+    "delete device-group DC-Core service tcp-8443  # only if not referenced elsewhere",
+    "commit; push to device group (Panorama) through the normal change process"
+  ]
+}

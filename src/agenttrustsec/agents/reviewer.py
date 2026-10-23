@@ -7,9 +7,12 @@ on `agenttrustsec/lab/reviewers` only after verifying intake's badge, key and mo
 session intake sealed for the review, then replies to intake only (reviews stay independent).
 
 Approves only a clean RuleGate verdict: decision APPROVE, no human review, the reviewed
-change_id is the proposed one, and the lines digest matches the lines it was shown. Anything
-else — conditions, errors, a blocked call, a malformed proposal — is a reject (deny by default).
-The reply carries the lines digest, so intake can bind its approval to exactly what was seen.
+change_id is the proposed one, and the proposed lines are exactly the lines the GATEWAY's
+RuleGate rendered from that change request (item A: intake's rendering is checked against an
+independent one behind the gate). Anything else — conditions, errors, a blocked call, a
+malformed proposal, lines that do not implement the reviewed change — is a reject (deny by
+default). The reply carries the lines digest, so intake can bind its approval to exactly what
+was seen.
 
     python -m agenttrustsec.agents.reviewer serve [--audit audit/reviewer-group.jsonl]
 """
@@ -63,6 +66,9 @@ def verdict(proposal: dict[str, Any], summary: Any) -> dict[str, Any]:
         reasons.append("needs human review")
     if s.get("change_id") != proposal["change_id"]:
         reasons.append(f"reviewed {s.get('change_id')!r}, proposed {proposal['change_id']!r}")
+    staged = s.get("staged") if isinstance(s.get("staged"), dict) else {}
+    if staged.get("lines_digest") != proposal["lines_digest"]:
+        reasons.append("lines do not implement the reviewed change")
     return {"proposal_id": proposal["proposal_id"], "change_id": proposal["change_id"],
             "lines_digest": proposal["lines_digest"], "approve": not reasons,
             "reason": "; ".join(reasons) or "RuleGate APPROVE, no findings needing review",

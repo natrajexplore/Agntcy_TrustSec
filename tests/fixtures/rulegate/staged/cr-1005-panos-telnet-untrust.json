@@ -1,0 +1,15 @@
+{
+  "vendor": "panos",
+  "filename": "staged_config.set",
+  "rule_name": "CR-1005-untrust-to-app-trust",
+  "config": "# RuleGate staged configuration - CR-1005 (DC-Core)\n# NOT APPLIED. Review, then apply through the normal change process (candidate config -> commit -> push).\n# Ticket: CHG0045861 | Requester: facilities-vendor\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust from [ untrust ]\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust to [ app-trust ]\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust source [ 198.51.100.40 ]\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust destination [ 10.30.10.77 ]\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust application [ telnet ]\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust service [ application-default ]\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust action allow\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust profile-setting group Strict-Inspection\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust log-end yes\nset device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust description \"CR-1005 CHG0045861\"\nmove device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust bottom\n",
+  "test_plan": [
+    "PRE-CHANGE (expect current behaviour, see shadow analysis): test security-policy-match from untrust to app-trust source 198.51.100.40 destination 10.30.10.77 protocol 6 destination-port <port> application telnet",
+    "POST-CHANGE (expect match on rule CR-1005-untrust-to-app-trust): test security-policy-match from untrust to app-trust source 198.51.100.40 destination 10.30.10.77 protocol 6 destination-port <port> application telnet",
+    "POST-CHANGE: confirm traffic log entries for the rule (log-end) and zero threat-log drops for legitimate flows."
+  ],
+  "rollback": [
+    "delete device-group DC-Core pre-rulebase security rules CR-1005-untrust-to-app-trust",
+    "commit; push to device group (Panorama) through the normal change process"
+  ]
+}

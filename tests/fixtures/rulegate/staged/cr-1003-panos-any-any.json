@@ -1,0 +1,15 @@
+{
+  "vendor": "panos",
+  "filename": "staged_config.set",
+  "rule_name": "CR-1003-web-dmz-to-any",
+  "config": "# RuleGate staged configuration - CR-1003 (DC-Core)\n# NOT APPLIED. Review, then apply through the normal change process (candidate config -> commit -> push).\n# Ticket: CHG0045844 | Requester: web-ops\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any from [ web-dmz ]\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any to [ any ]\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any source [ any ]\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any destination [ any ]\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any application [ any ]\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any service [ any ]\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any action allow\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any log-end yes\nset device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any description \"CR-1003 CHG0045844 expires 2026-10-11\"\nmove device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any before Block-DMZ-to-Mgmt\n",
+  "test_plan": [
+    "PRE-CHANGE (expect current behaviour, see shadow analysis): test security-policy-match from web-dmz to any source <source-ip> destination <destination-ip> protocol 6 destination-port <port>",
+    "POST-CHANGE (expect match on rule CR-1003-web-dmz-to-any): test security-policy-match from web-dmz to any source <source-ip> destination <destination-ip> protocol 6 destination-port <port>",
+    "POST-CHANGE: confirm traffic log entries for the rule (log-end) and zero threat-log drops for legitimate flows."
+  ],
+  "rollback": [
+    "delete device-group DC-Core pre-rulebase security rules CR-1003-web-dmz-to-any",
+    "commit; push to device group (Panorama) through the normal change process"
+  ]
+}

@@ -4,6 +4,9 @@ rulebases and the risk policy come from this package's `data/`, never from the c
 
 `review_for_device()` is what the gateway tool calls: the LAB DEVICE decides vendor, device
 group and rulebase — the caller cannot point the review at a different rulebase.
+
+`staged_lines()` (item A) turns RuleGate's rendering (render.py) into the exact lines push_config
+gets, so the lines are DERIVED from the reviewed request, never written next to it.
 """
 from __future__ import annotations
 
@@ -71,8 +74,46 @@ def review_for_device(device: str, change: dict[str, Any]) -> ReviewContext:
     return build_context(cr)
 
 
+class NotRenderable(ValueError):
+    pass
+
+
+def staged_lines(ctx: ReviewContext) -> dict[str, Any]:
+    """RuleGate's staged config -> the lines to push, plus rollback. Deterministic: the same
+    request + rulebase always gives the same lines (and digest).
+    PAN-OS: the `set` / `move` commands (the `#` header lines are comments, not config).
+    FTD: one canonical JSON line {method, endpoint, query, body} for the FMC REST call."""
+    from agenttrustsec.authz.broker import lines_digest
+    from agenttrustsec.review.render import render
+    st = render(ctx)
+    if st.vendor == "panos":
+        lines = [ln for ln in st.config.splitlines() if ln.strip() and not ln.startswith("#")]
+        if not lines or not all(ln.startswith(("set ", "move ")) for ln in lines):
+            raise NotRenderable("staged PAN-OS config is not only set/move commands")
+    else:
+        lines = [_fmc_line(st.config)]
+    return {"vendor": st.vendor, "rule_name": st.rule_name, "lines": lines,
+            "lines_digest": lines_digest(lines), "rollback": st.rollback}
+
+
+def _fmc_line(config: str) -> str:
+    meta, body = {}, []
+    for ln in config.splitlines():
+        if ln.startswith("//"):
+            key, sep, val = ln[2:].partition(":")
+            if sep and key.strip() in ("Method", "Endpoint", "Query"):
+                meta[key.strip().lower()] = val.strip()
+        else:
+            body.append(ln)
+    if set(meta) != {"method", "endpoint", "query"}:
+        raise NotRenderable("staged FMC payload is missing method, endpoint or query")
+    q = meta["query"]
+    meta["query"] = q[q.index("?"):] if "?" in q else ""       # "(prefilter rule)" is a note, not a query
+    return json.dumps({**meta, "body": json.loads("\n".join(body))}, sort_keys=True, separators=(",", ":"))
+
+
 def summary(ctx: ReviewContext) -> dict[str, Any]:
-    """Compact, JSON-safe result for agents and the audit trail."""
+    """Compact, JSON-safe result for agents and the audit trail, with the staged lines."""
     r = ctx.risk
     return {
         "change_id": ctx.request.change_id,
@@ -84,4 +125,5 @@ def summary(ctx: ReviewContext) -> dict[str, Any]:
         "needs_human_review": r.needs_human_review,
         "findings": [{"id": f.check_id, "severity": f.severity.value, "title": f.title}
                      for f in r.findings],
+        "staged": staged_lines(ctx),
     }

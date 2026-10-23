@@ -161,10 +161,32 @@ any/any → REJECT, score 100 (fail-safe).
   only `review_change` reached the gateway, nothing pushed**; executor without approval / with
   an approval for other lines / replaying a used one → `approval` BLOCK; reader-01 dispatching to
   the executor → `caller` BLOCK. Full suite 465 passed with the lab up.
-* **Known limits:** (1) reviewers judge the RuleGate change request and approve the lines digest
-  they were shown, but nothing yet proves the lines *implement* that request (needs a
-  deterministic CR → PAN-OS / FMC renderer; backlog). (2) Redeemed jtis live in the gateway's
+* **Known limits:** (1) ~~nothing proves the lines *implement* the reviewed request~~ —
+  resolved by item A (§5g). (2) Redeemed jtis live in the gateway's
   memory; a restart forgets them (15 min ttl limits the window). (3) One reviewer in the lab pool.
+
+## 5g. Item A as built (2026-10-23) — change request → config (owner: jinja2)
+
+* `review/render.py` + `review/templates/`: RuleGate's deterministic renderer (@ 6ce533b),
+  vendored unchanged (imports only). Proof of a faithful port: the 11 sample CRs rendered ONCE by
+  RuleGate in its own venv are golden fixtures (`tests/fixtures/rulegate/staged/`); ours must be
+  byte-identical (`tests/test_review_render.py`). New dependency `jinja2>=3.1.6,<4`.
+* `engine.staged_lines(ctx)`: PAN-OS = the `set` / `move` commands (the `#` header is comment,
+  never pushed); FTD = one canonical JSON line `{method, endpoint, query, body}` for the FMC call
+  (UUID placeholders stay as RuleGate emits them — the lab `push_config` is a mock). `summary()`
+  (= `review_change`'s result) carries `staged: {vendor, rule_name, lines, lines_digest, rollback}`.
+* Change file = `device` + `change` only; a file with `lines` is refused. Intake renders the
+  lines locally (`--dry-run` shows lines + rollback).
+* Reviewer approves only if the proposal's lines digest == the digest of the lines the
+  **gateway's** RuleGate rendered in `review_change` — intake's rendering is checked against an
+  independent one behind the gate, then the approval token binds exactly those lines.
+  TrustSec analogy: the switch no longer accepts a hand-typed dACL next to the authz result;
+  the dACL is generated from the authorization profile ISE just evaluated.
+* Injection: every field that reaches a pushed line is restricted by the vendored request model
+  (no whitespace / quotes / brackets / `;` / control chars); free text (justification) reaches no
+  pushed line, requester only the `#` comment. Tested per field.
+* Live: CR-1001 pushed with the 12 rendered lines (gateway audit `args.lines` == rendering),
+  CR-1003 rejected, `--quick` demo green; full suite **541 passed** with lab + Ollama up.
 
 ## 5f. P5e as built (2026-10-23) — rogue agent + live end-to-end demo (owner: full run, `--quick`)
 

@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "cryptography>=44",
+    "jinja2>=3.1.6,<4",  # P5 item A: RuleGate's staged-config templates (3.1.6 = sandbox CVE fixes)
     "mcp>=2.3,<3",
     "pyjwt>=2.10",
     "pyyaml>=6.0",

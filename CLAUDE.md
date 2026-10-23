@@ -100,7 +100,7 @@ tests/                 # pytest — must stay green
       attested groups (`transport/slim_group.py`, `authz/groups.py`, `policies/groups.yaml`).
       Move agents onto SLIM: point-to-point first, then a group
       session for the reviewer pool. No agent opens an inbound port.
-- [ ] **P4 Authorization** — design `docs/P4-design.md` (D1 local Ollama qwen2.5:7b, D2 LLM only, D3 BLOCK). P4a done: eval harness (`eval/harness.py`, `astra_eval.py`,
+- [x] **P4 Authorization** — design `docs/P4-design.md` (D1 local Ollama qwen2.5:7b, D2 LLM only, D3 BLOCK). P4a done: eval harness (`eval/harness.py`, `astra_eval.py`,
       `netops_eval.py` + 48 cases), baseline in `eval/results/p4a-baseline.md`. P4b done: scope check
       (`scoped_args` in tbac.yaml, T6; D5 = BLOCK). P4c done: `EmbeddingMatcher` (fastembed,
       `semantic` extra) + `eval/results/p4c-embedding.md` — prefilter does not pay off on netops,
@@ -109,7 +109,8 @@ tests/                 # pytest — must stay green
       temperature 0 + seed, fail closed). P4d done: ASTRA 1.2%/0% wrong/null allowed but
       26% legit blocked; catalog / top-5 prompt variants worse (`eval/results/p4d-*`). P4e done
       (D4 = change tools only): change tools judged by the local LLM, reads keep keywords;
-      SLIM gateway refuses to start without Ollama. Live gateway re-test pending (lab stopped).
+      SLIM gateway refuses to start without Ollama. Verified live: change via real gateway
+      judged by the local LLM; full suite 279 passed with lab + Ollama up.
       TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.

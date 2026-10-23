@@ -136,3 +136,15 @@ def test_genuine_executor_still_needs_change_intent():
     r = agent(key="executor-01", slim_name=slim_name(EXECUTOR), claim=EXECUTOR, badge_id=EXECUTOR,
               tool="push_config", args=PUSH, intent="read")
     assert r.get("blocked_by") == "intent", r
+
+
+def test_legitimate_change_judged_by_local_llm(audit_path):
+    # P4e (D4): a change tool in a change session reaches the local LLM verifier in the real
+    # gateway; ALLOW requires its verdict, which is recorded in the audit reason.
+    r = agent(key="executor-01", slim_name=slim_name(EXECUTOR), claim=EXECUTOR, badge_id=EXECUTOR,
+              tool="push_config", args={"device": "edge-fw-01", "lines": ["no permit ip any any"]},
+              intent="change", prompt="Remove the 'permit ip any any' entry from the ACL on edge-fw-01")
+    assert r.get("ok"), r
+    rec = last_audit(audit_path)
+    assert rec["verdict"] == "ALLOW" and rec["tool"] == "push_config"
+    assert "semantic: llm allow" in rec["checks"][-1]["reason"], rec["checks"][-1]

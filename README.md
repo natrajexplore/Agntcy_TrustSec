@@ -175,7 +175,7 @@ tests/                   unit tests + live tests against the lab
 | P1 | Learn by running SLIM, Identity, CASA | 🟡 SLIM + Identity done; CASA pending (needs Minikube) |
 | P2 | Real AGNTCY badges: issue, verify, revoke | ✅ incl. the revocation-replay fix |
 | P3 | SLIM transport with key-bound identity | ✅ keys, adapter, peer check, gateway on SLIM, attested reviewer groups |
-| P4 | Intent: scope check + local LLM verifier for change tools, evaluated on ASTRA | ✅ (live gateway re-test pending) |
+| P4 | Intent: scope check + local LLM verifier for change tools, evaluated on ASTRA | ✅ |
 | P5 | Real agents: intake, reader (pyATS/mock), Palo Alto / FTD change reviewer, executor, rogue | ⏳ |
 | P6 | Live decisions dashboard, latency and block-rate benchmarks, node admission control | ⏳ |
 

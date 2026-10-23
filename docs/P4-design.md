@@ -200,8 +200,10 @@ at startup and **refuses to start** if Ollama is down or the pinned model change
 to keywords. Keyword-only mode remains for unit tests and the offline demo.
 Netops: same as the keyword gate (only a01 wrongly allowed, 0 legitimate blocked); every
 legitimate change passed the LLM; latency only on change calls (p95 ≈ 5 s here).
-**Not yet verified live:** the SLIM gateway tests (lab containers were stopped; Docker +
-gateway + Ollama's ~7 GB may hit the laptop's memory limit).
+**Verified live (2026-10-24):** the real SLIM gateway (`test_gateway_slim_live.py`, 8 tests +
+impostor) incl. a legitimate `push_config` change judged by the local LLM → ALLOW with
+`semantic: llm allow` in the audit; full suite 279 passed with lab + Ollama up (free RAM fell
+to ~2 GB while the model was loaded).
 
 ## 5. Work order (one PR each)
 

@@ -231,6 +231,26 @@ def ollama_judge(model: str = OLLAMA_MODEL, digest: str = OLLAMA_DIGEST, url: st
     return judge
 
 
+# (task, requested tool, server tools) -> the other tools worth showing the judge.
+RivalPicker = Callable[[str, ToolRef, Sequence[ToolRef]], list[ToolRef]]
+
+
+def embedding_rivals(embed: Embedder, k: int = 5) -> RivalPicker:
+    """Shortlist the k server tools (other than the requested one) most similar to the task.
+    The full catalog made prompts ~4k tokens (~111 s/check on the lab laptop); a shortlist
+    keeps the likely alternatives in view at a fraction of the prompt size."""
+    ranker = EmbeddingMatcher(embed, 0.0)
+
+    def pick(task: str, tool: ToolRef, server_tools: Sequence[ToolRef]) -> list[ToolRef]:
+        others = [t for t in server_tools if t != tool]
+        if not others:
+            return []
+        q, = embed([task])
+        scored = sorted(zip(ranker._vecs(others), others), key=lambda vt: -cosine(q, vt[0]))
+        return [t for _, t in scored[:k]]
+    return pick
+
+
 class LlmMatcher:
     """LLM-ResM-style verifier (P4d). Sees ONLY the sealed user task and OUR tool name +
     description (from tbac.yaml / the benchmark) — never tool arguments, results, or a
@@ -238,8 +258,12 @@ class LlmMatcher:
       a finish reason other than "stop" (e.g. "length"), unparseable JSON, or a verdict
       other than allow/deny. Definitive verdicts are cached per (task, tool)."""
 
-    def __init__(self, judge: Judge, *, with_catalog: bool = False, system: str = LLM_SYSTEM):
+    def __init__(self, judge: Judge, *, with_catalog: bool = False, system: str = LLM_SYSTEM,
+                 rival_picker: RivalPicker | None = None):
+        if with_catalog and rival_picker:
+            raise ValueError("choose the full catalog OR a rival shortlist, not both")
         self.judge, self.with_catalog, self.system = judge, with_catalog, system
+        self.rival_picker = rival_picker
         self._cache: dict[tuple[str, ToolRef], MatchResult] = {}
         self.usage = {"calls": 0, "input_tokens": 0, "output_tokens": 0}
 
@@ -249,6 +273,10 @@ class LlmMatcher:
         if self.with_catalog:
             payload["other_tools_on_this_server"] = [
                 {"name": t.name, "description": t.description} for t in server_tools if t != tool]
+        elif self.rival_picker:
+            payload["most_similar_other_tools_on_this_server"] = [
+                {"name": t.name, "description": t.description}
+                for t in self.rival_picker(task, tool, server_tools)]
         return json.dumps(payload, ensure_ascii=False)
 
     def match(self, task: str, tool: ToolRef, server_tools: tuple[ToolRef, ...] = ()) -> MatchResult:

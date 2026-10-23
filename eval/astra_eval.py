@@ -63,7 +63,13 @@ def load_cases(root: Path, tools: str, split: str) -> list[Case]:
 
 MATCHERS = {"lexical": lambda: LexicalMatcher(),
             "llm": lambda: LlmMatcher(ollama_judge()),
-            "llm-catalog": lambda: LlmMatcher(ollama_judge(), with_catalog=True)}
+            "llm-catalog": lambda: LlmMatcher(ollama_judge(), with_catalog=True),
+            "llm-rivals5": lambda: _rivals_matcher(5)}
+
+
+def _rivals_matcher(k: int):
+    from agenttrustsec.authz.semantic import embedding_rivals, fastembed_embedder
+    return LlmMatcher(ollama_judge(), rival_picker=embedding_rivals(fastembed_embedder(), k))
 
 
 def stratified(cases: list[Case], limit: int) -> list[Case]:
@@ -138,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--split", default="validation", choices=["validation", "test"])
     ap.add_argument("--matcher", default="lexical", choices=sorted(MATCHERS))
     ap.add_argument("--limit", type=int, default=0, help="stratified sample size per --tools set")
+    ap.add_argument("--label", choices=["correct", "wrong", "null"], help="keep only this label (after --limit)")
+    ap.add_argument("--max-cases", type=int, default=0, help="keep only the first N cases (after --label)")
     ap.add_argument("--checkpoint", type=Path, help="JSONL file: save each verdict, resume on re-run")
     ap.add_argument("--batch", type=int, default=0, help="with --checkpoint: max new model calls this run")
     args = ap.parse_args(argv)
@@ -155,6 +163,10 @@ def main(argv: list[str] | None = None) -> int:
     print(TABLE_HEADER)
     for tools in args.tools:
         cases = stratified(load_cases(args.astra, tools, args.split), args.limit)
+        if args.label:
+            cases = [c for c in cases if c.label == args.label]
+        if args.max_cases:
+            cases = cases[:args.max_cases]
         if args.checkpoint:
             outcomes, n_done, n_total = run_checkpointed(matcher, cases, args.checkpoint, args.batch)
             if outcomes is None:

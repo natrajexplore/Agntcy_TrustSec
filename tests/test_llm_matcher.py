@@ -127,3 +127,27 @@ def test_ollama_prompt_filling_the_context_window_is_a_deny(monkeypatch):
                                     "message": {"content": '{"verdict":"allow","reason":"x"}'}})
     r = LlmMatcher(ollama_judge(num_ctx=8192)).match(TASK, ACL)
     assert r.allow is False and "truncated" in r.reason
+
+
+def test_rival_shortlist_in_prompt_excludes_requested_tool():
+    from agenttrustsec.authz.semantic import embedding_rivals
+    axes = ("acl", "bgp", "config", "push")
+
+    def embed(texts):
+        return [[1.0 if a in x.lower() else 0.0 for a in axes] + [0.1] for x in texts]
+    bgp = ToolRef("show_bgp", "bgp neighbors", "netops-mcp")
+    cfg = ToolRef("show_config", "running config", "netops-mcp")
+    server = (ACL, PUSH, bgp, cfg)
+    pick = embedding_rivals(embed, k=2)
+    rivals = pick("audit the acl and config", PUSH, server)
+    assert PUSH not in rivals and len(rivals) == 2 and set(rivals) == {ACL, cfg}
+    j = FakeJudge(verdict("deny"))
+    LlmMatcher(j, rival_picker=pick).match("audit the acl and config", PUSH, server)
+    body = json.loads(j.calls[0][1])
+    assert [t["name"] for t in body["most_similar_other_tools_on_this_server"]] == [r.name for r in rivals]
+    assert "other_tools_on_this_server" not in body
+
+
+def test_catalog_and_shortlist_are_exclusive():
+    with pytest.raises(ValueError):
+        LlmMatcher(FakeJudge(verdict("allow")), with_catalog=True, rival_picker=lambda *a: [])

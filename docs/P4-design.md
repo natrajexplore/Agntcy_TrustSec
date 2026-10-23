@@ -175,6 +175,21 @@ followed the schema and judged the 3 probe cases correctly. **The provisional D4
 (p95 ≤ 1.5 s) is not reachable locally** — the per-session verdict cache makes it a one-time
 cost per tool per session; owner decides at P4e.
 
+## 4f. P4d results — ASTRA + prompt variants (2026-10-24)
+
+`eval/results/p4d-llm-astra.md`, `eval/results/p4d-llm-variants.md`.
+* **Plain prompt, ASTRA test, 200 stratified single-tool tasks:** wrong false-allow **1.2%**, null
+  **0.0%**, precision 98.7% (paper GPT-4o LLM-ResM: 93%) — but **false-block 26.0%** (paper ~1%);
+  9.3 s p50 / 17.3 s p95 per check. The 3-tool half was stopped by low memory (not run).
+* **Full catalog in the prompt:** ~111 s/check here (~4k-token prompts) — impractical.
+* **Top-5 similar tools in the prompt:** on 20 paired legitimate tasks it blocks **75%** vs the
+  plain prompt's **40%**, rescues none, and is 2× slower — dropped.
+* Robustness added on the way: explicit `num_ctx` + "truncated" → deny, `keep_alive` 2 m,
+  resumable eval (`--checkpoint`/`--batch`), `--label`/`--max-cases` for paired tests.
+
+**Open for P4e:** the plain prompt's over-blocking (26% on ASTRA, 1/18 on netops) vs the
+provisional D4 bar (false-block ≤ 10%, p95 ≤ 1.5 s — latency also unreachable locally).
+
 ## 5. Work order (one PR each)
 
 * **P4a** ✅ eval harness: real ASTRA loader, `netops_cases.yaml`, metrics/report; **baseline

@@ -106,7 +106,9 @@ tests/                 # pytest — must stay green
       `semantic` extra) + `eval/results/p4c-embedding.md` — prefilter does not pay off on netops,
       so D2 revised to an LLM-only check. **No paid APIs in this project — local Ollama only**
       (owner, 2026-10-23): `LlmMatcher` + `ollama_judge` (qwen2.5:7b-instruct pinned by digest,
-      temperature 0 + seed, fail closed). P4d: local eval runs in progress.
+      temperature 0 + seed, fail closed). P4d done: ASTRA 1.2%/0% wrong/null allowed but
+      26% legit blocked; catalog / top-5 prompt variants worse (`eval/results/p4d-*`). Next: P4e
+      (wire into gate; decide D4 bar).
       TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.

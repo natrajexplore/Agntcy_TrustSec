@@ -8,8 +8,9 @@
 #   act -j test -P ubuntu-latest=catthehacker/ubuntu:act-latest --network act-isolated
 #
 # --network act-isolated matters: by default act's containers can reach services on this
-# PC's localhost, so live tests would hit the running lab (177 passed / 15 skipped) —
-# unlike GitHub's runner. Isolated, it matches GitHub: 153 passed / 39 skipped (2026-10-22).
+# PC's localhost, so live tests would hit the running lab instead of skipping —
+# unlike GitHub's runner. Isolated, it matches GitHub: 443 passed / 51 skipped on 3.11 and
+# 3.12 (2026-10-23, after P6; the 51 are the live-lab tests).
 #
 # Live tests (lab Identity Node, SLIM node, agent keys) skip themselves here: CI has no
 # lab and must never hold real keys or secrets (CLAUDE.md rule 5).

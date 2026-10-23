@@ -2,7 +2,9 @@
 
 argv[1] = JSON config: key (name in ~/.agenttrustsec/keys or "__ephemeral__"),
 slim_name, sub (token subject, default slim_name), claim (agent_id claimed in _meta),
-badge_id (whose current badge to present) or badge_jose, tool, args, intent, gateway_id.
+badge_id (whose current badge to present) or badge_jose, tool, args, intent, gateway_id,
+approve (mint a reviewer approval for these args, as intake does after the pool approves),
+approve_lines (approve OTHER lines than the ones pushed), repeat (call N times, same approval).
 Prints one line: RESULT {...}.
 """
 import asyncio
@@ -59,8 +61,13 @@ async def main(cfg: dict) -> dict:
     ep = await slim.connect(name, slim.jwt_identity(private_pem(cfg["key"]), cfg.get("sub", name), trust))
     badge = cfg.get("badge_jose") or current_badge(cfg["badge_id"])
     broker = TokenBroker(bytes.fromhex(os.environ["AGENTTRUSTSEC_BROKER_KEY"]))  # lab intake stand-in
-    token = broker.seal_session(Session(cfg.get("prompt", "Audit the ACLs on edge-fw-01"),
-                                        Intent(cfg.get("intent", "read"))))
+    session = Session(cfg.get("prompt", "Audit the ACLs on edge-fw-01"), Intent(cfg.get("intent", "read")))
+    token = broker.seal_session(session)
+    approval = None
+    if cfg.get("approve"):
+        a = cfg.get("args", {})
+        approval = broker.mint_approval("CR-LIVE", a["device"], cfg.get("approve_lines", a["lines"]),
+                                        session.session_id, ["reviewer-01"])
     gw = cfg["gateway_id"]
     server_verifier = AgntcyBadgeVerifier(load_role_map(IDENTITIES, "mcp_servers"),
                                           badge_type=MCP_SERVER_BADGE,
@@ -70,13 +77,16 @@ async def main(cfg: dict) -> dict:
         tc = TrustedClient(c, agent_id=cfg["claim"], badge=badge, session_token=token,
                            verifier=server_verifier, server_id=gw,
                            transport_peer=lambda: transport.peer, peer_binding=PeerBinding(trust))
-        try:
-            r = await tc.call(cfg["tool"], cfg.get("args", {}))
-            return {"ok": True, "text": r.content[0].text if r.content else ""}
-        except McpBlocked as e:
-            return {"blocked_by": e.blocked_by, "reason": e.reason}
-        except ServerAuthError as e:
-            return {"server_auth_error": str(e)}
+        out = []
+        for _ in range(cfg.get("repeat", 1)):
+            try:
+                r = await tc.call(cfg["tool"], cfg.get("args", {}), approval=approval)
+                out.append({"ok": True, "text": r.content[0].text if r.content else ""})
+            except McpBlocked as e:
+                out.append({"blocked_by": e.blocked_by, "reason": e.reason})
+            except ServerAuthError as e:
+                out.append({"server_auth_error": str(e)})
+        return out[0] if len(out) == 1 else {"calls": out}
 
 
 if __name__ == "__main__":

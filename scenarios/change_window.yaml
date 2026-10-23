@@ -12,7 +12,25 @@ steps:
     badge: valid
     tool: push_config
     args: { device: edge-fw-01, lines: ["no permit ip any any"] }
+    approval: approved          # reviewer pool approved exactly these lines (P5d)
     expect: ALLOW
+
+  - label: "E3: same approval replayed for a second push"
+    agent_id: executor-01
+    role: executor
+    badge: valid
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["no permit ip any any"] }
+    approval: replayed
+    expect: BLOCK
+
+  - label: "E3: executor pushes with no reviewer approval"
+    agent_id: executor-01
+    role: executor
+    badge: valid
+    tool: push_config
+    args: { device: edge-fw-01, lines: ["no permit ip any any"] }
+    expect: BLOCK
 
   - label: Reader still cannot push, even in a change window
     agent_id: reader-01

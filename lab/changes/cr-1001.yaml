@@ -1,0 +1,27 @@
+# Lab change order (P5d): Clean change: RuleGate APPROVE, no findings -> reviewers approve -> pushed.
+# change = RuleGate change request (cr-1001-panos-web-to-db.yaml, target dropped: the device decides);
+# lines  = the exact config intake proposes, reviewers see and the approval token binds.
+device: edge-fw-01
+lines:
+- set rulebase security rules CR-1001 from web-dmz to db-trust source 10.20.30.0/27 destination 10.40.10.15 application postgres service tcp-5432 action allow log-end yes profile-setting group Strict-Inspection
+change:
+  change_id: CR-1001
+  ticket_ref: CHG0045821
+  requester: app-team-payments
+  business_justification: New payments API must query the transaction DB
+  request:
+    action: allow
+    source_zone: web-dmz
+    source:
+    - 10.20.30.0/27
+    destination_zone: db-trust
+    destination:
+    - 10.40.10.15
+    application:
+    - postgres
+    service:
+    - tcp/5432
+    logging: true
+    security_profile_group: Strict-Inspection
+  temporary: false
+  expiry: null

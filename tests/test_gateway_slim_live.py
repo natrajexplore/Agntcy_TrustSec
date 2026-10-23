@@ -143,11 +143,14 @@ def test_legitimate_change_judged_by_local_llm(audit_path):
     # gateway; ALLOW requires its verdict, which is recorded in the audit reason.
     r = agent(key="executor-01", slim_name=slim_name(EXECUTOR), claim=EXECUTOR, badge_id=EXECUTOR,
               tool="push_config", args={"device": "edge-fw-01", "lines": ["no permit ip any any"]},
-              intent="change", prompt="Remove the 'permit ip any any' entry from the ACL on edge-fw-01")
+              intent="change", prompt="Remove the 'permit ip any any' entry from the ACL on edge-fw-01",
+              approve=True)
     assert r.get("ok"), r
     rec = last_audit(audit_path)
     assert rec["verdict"] == "ALLOW" and rec["tool"] == "push_config"
-    assert "semantic: llm allow" in rec["checks"][-1]["reason"], rec["checks"][-1]
+    checks = {c["name"]: c for c in rec["checks"]}
+    assert "semantic: llm allow" in checks["intent"]["reason"], checks["intent"]
+    assert checks["approval"]["status"] == "PASS" and "CR-LIVE" in checks["approval"]["reason"]
 
 
 # --- P5b/P5c1: real agent processes — intake dispatches to the reader job server -----------
@@ -157,51 +160,151 @@ def reader_audit(tmp_path_factory):
     return tmp_path_factory.mktemp("reader") / "dispatch.jsonl"
 
 
-@pytest.fixture(scope="module")
-def reader_server(gateway, reader_audit):
-    proc = subprocess.Popen([sys.executable, "-m", "agenttrustsec.agents.reader", "serve",
-                             "--audit", str(reader_audit)], env=ENV, stdout=subprocess.PIPE,
+def start_agent(module, name, audit):
+    proc = subprocess.Popen([sys.executable, "-m", f"agenttrustsec.agents.{module}", "serve",
+                             "--audit", str(audit)], env=ENV, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
     deadline = time.time() + 60
     while time.time() < deadline:
         line = proc.stdout.readline()
-        if line.startswith("READY reader-01"):
-            break
+        if line.startswith(f"READY {name}"):
+            return proc
         if proc.poll() is not None:
-            pytest.fail(f"reader exited: {proc.stdout.read()[-800:]}")
+            pytest.fail(f"{name} exited: {proc.stdout.read()[-800:]}")
+    proc.kill()
+    pytest.fail(f"{name} did not come up")
+
+
+@pytest.fixture(scope="class")       # stops after TestReaderJobs: frees the reader-01 SLIM name
+def reader_server(gateway, reader_audit):
+    proc = start_agent("reader", "reader-01", reader_audit)
     yield proc
     proc.terminate()
     proc.wait(10)
 
 
-def run_json(*argv):
+def run_json(*argv, timeout=120):
     out = subprocess.run([sys.executable, *argv], env=ENV, capture_output=True, text=True,
-                         encoding="utf-8", errors="replace", timeout=120)
+                         encoding="utf-8", errors="replace", timeout=timeout)
     line = next((ln for ln in reversed(out.stdout.splitlines())
                  if ln.startswith("{") or ln.startswith("RESULT ")), None)
     assert line, f"no result: {out.stdout[-600:]} {out.stderr[-600:]}"
     return json.loads(line[7:] if line.startswith("RESULT ") else line)
 
 
-def test_intake_dispatches_read_to_reader_through_the_gateway(reader_server, reader_audit, audit_path):
-    r = run_json("-m", "agenttrustsec.agents.intake", "Audit the ACLs on edge-fw-01 for any permit-any rules")
-    assert r["ok"] and r["plan"]["tool"] == "show_acl", r
-    assert "permit ip any any" in r["worker_result"]["result"]
-    gw = last_audit(audit_path)                                     # gateway: the reader's call
-    assert gw["verdict"] == "ALLOW" and gw["agent_id"] == READER and gw["tool"] == "show_acl"
-    disp = json.loads(reader_audit.read_text().splitlines()[-1])    # reader: intake's dispatch
-    assert disp["verdict"] == "ALLOW" and disp["tool"] == "dispatch.run_job"
-    assert "session" not in disp["args"]                            # forwarded token never logged
+class TestReaderJobs:
+    def test_intake_dispatches_read_to_reader_through_the_gateway(self, reader_server, reader_audit,
+                                                                  audit_path):
+        r = run_json("-m", "agenttrustsec.agents.intake", "Audit the ACLs on edge-fw-01 for any permit-any rules")
+        assert r["ok"] and r["plan"]["tool"] == "show_acl", r
+        assert "permit ip any any" in r["worker_result"]["result"]
+        gw = last_audit(audit_path)                                     # gateway: the reader's call
+        assert gw["verdict"] == "ALLOW" and gw["agent_id"] == READER and gw["tool"] == "show_acl"
+        disp = json.loads(reader_audit.read_text().splitlines()[-1])    # reader: intake's dispatch
+        assert disp["verdict"] == "ALLOW" and disp["tool"] == "dispatch.run_job"
+        assert "session" not in disp["args"]                            # forwarded token never logged
 
-
-def test_rogue_dispatch_to_reader_is_refused(reader_server, reader_audit):
-    # executor-01: real badge, real key, mutual auth OK — but not allowed to give the reader work
-    r = run_json(str(ROOT / "tests" / "_dispatch_child.py"), "executor-01")
-    assert r.get("blocked_by") == "caller" and "may not dispatch" in r["reason"], r
-    disp = json.loads(reader_audit.read_text().splitlines()[-1])
-    assert disp["verdict"] == "BLOCK" and disp["blocked_by"] == "caller"
+    def test_rogue_dispatch_to_reader_is_refused(self, reader_server, reader_audit):
+        # executor-01: real badge, real key, mutual auth OK — but not allowed to give the reader work
+        r = run_json(str(ROOT / "tests" / "_dispatch_child.py"), "executor-01")
+        assert r.get("blocked_by") == "caller" and "may not dispatch" in r["reason"], r
+        disp = json.loads(reader_audit.read_text().splitlines()[-1])
+        assert disp["verdict"] == "BLOCK" and disp["blocked_by"] == "caller"
 
 
 def test_intake_refuses_what_it_cannot_plan():
     r = run_json("-m", "agenttrustsec.agents.intake", "Compare the ACLs on edge-fw-01 and edge-fw-02")
     assert r["ok"] is False and "cannot plan" in r["error"], r
+
+
+# --- P5d E3 at the gateway: the executor's own badge + key, approvals minted by the lab intake
+# stand-in. These run BEFORE the executor job server starts (same SLIM name; tests run in file order).
+
+CHANGE_PROMPT = "Remove the 'permit ip any any' entry from the ACL on edge-fw-01"
+NO_ANY = {"device": "edge-fw-01", "lines": ["no permit ip any any"]}
+
+
+@pytest.mark.parametrize("extra,why", [
+    ({}, "no approval token"),
+    ({"approve": True, "approve_lines": ["no permit ip any any", "permit ip any any"]}, "lines differ"),
+])
+def test_E3_executor_without_a_matching_approval_is_blocked(extra, why):
+    r = agent(key="executor-01", slim_name=slim_name(EXECUTOR), claim=EXECUTOR, badge_id=EXECUTOR,
+              tool="push_config", args=NO_ANY, intent="change", prompt=CHANGE_PROMPT, **extra)
+    assert r.get("blocked_by") == "approval" and why in r["reason"], r
+
+
+def test_E3_replayed_approval_is_blocked():
+    r = agent(key="executor-01", slim_name=slim_name(EXECUTOR), claim=EXECUTOR, badge_id=EXECUTOR,
+              tool="push_config", args=NO_ANY, intent="change", prompt=CHANGE_PROMPT, approve=True, repeat=2)
+    first, second = r["calls"]
+    assert first.get("ok"), r
+    assert second.get("blocked_by") == "approval" and "replay" in second["reason"], r
+
+
+# --- P5c2/P5d: intake -> attested reviewer group -> approval -> executor -> gateway ----------
+
+REVIEWER = "AGNTCY-c55ca3ee-802d-4209-8352-343197d644ae"
+CHANGE_REQ = "Add a rule on edge-fw-01 so the payments API in web-dmz can query the transaction DB (CR-1001)"
+
+
+@pytest.fixture(scope="module")
+def agent_audits(tmp_path_factory):
+    d = tmp_path_factory.mktemp("agents")
+    return {"reviewer": d / "reviewer.jsonl", "executor": d / "executor.jsonl", "intake": d / "intake.jsonl"}
+
+
+@pytest.fixture(scope="module")
+def change_agents(gateway, agent_audits):
+    procs = [start_agent("reviewer", "reviewer-01", agent_audits["reviewer"]),
+             start_agent("executor", "executor-01", agent_audits["executor"])]
+    yield procs
+    for p in procs:
+        p.terminate()
+        p.wait(10)
+
+
+def audit_records(path):
+    return [json.loads(ln) for ln in path.read_text().splitlines()] if path.exists() else []
+
+
+def intake_change(cr, request, audits):
+    return run_json("-m", "agenttrustsec.agents.intake", "--change-file", str(ROOT / "lab" / "changes" / cr),
+                    "--audit", str(audits["intake"]), request, timeout=300)
+
+
+def test_clean_change_is_reviewed_approved_and_pushed(change_agents, agent_audits, audit_path):
+    r = intake_change("cr-1001.yaml", CHANGE_REQ, agent_audits)
+    assert r["ok"], r
+    assert r["review"]["approved"] and r["review"]["admitted"] == [REVIEWER]
+    assert r["review"]["replies"][REVIEWER]["decision"] == "APPROVE"
+    assert "pushed" in json.dumps(r["worker_result"])
+    recs = audit_records(audit_path)
+    review = next(x for x in reversed(recs) if x["tool"] == "review_change")
+    assert review["verdict"] == "ALLOW" and review["agent_id"] == REVIEWER
+    push = recs[-1]
+    assert push["tool"] == "push_config" and push["verdict"] == "ALLOW" and push["agent_id"] == EXECUTOR
+    checks = {c["name"]: c for c in push["checks"]}
+    assert checks["approval"]["status"] == "PASS" and "CR-1001" in checks["approval"]["reason"]
+    assert "semantic: llm allow" in checks["intent"]["reason"]
+    joins = audit_records(agent_audits["intake"])                   # reviewer admitted to the group
+    assert any(j["agent_id"] == REVIEWER and j["verdict"] == "ALLOW" for j in joins)
+    disp = audit_records(agent_audits["executor"])[-1]              # executor: intake's dispatch
+    assert disp["verdict"] == "ALLOW" and disp["tool"] == "dispatch.run_change"
+    assert "session" not in disp["args"] and "approval" not in disp["args"]
+
+
+def test_any_any_change_is_rejected_and_never_pushed(change_agents, agent_audits, audit_path):
+    before = len(audit_records(audit_path))
+    r = intake_change("cr-1003.yaml", "Add the any/any troubleshooting rule on edge-fw-01 (CR-1003)", agent_audits)
+    assert r["ok"] is False and r["review"]["approved"] is False, r
+    assert "rejected" in r["error"] and r["review"]["replies"][REVIEWER]["decision"] == "REJECT"
+    new = audit_records(audit_path)[before:]
+    assert [x["tool"] for x in new] == ["review_change"]             # reviewed, never pushed
+
+
+def test_rogue_dispatch_to_executor_is_refused(change_agents, agent_audits):
+    r = run_json(str(ROOT / "tests" / "_dispatch_child.py"), "reader-01", "executor-01")
+    assert r.get("blocked_by") == "caller" and "may not dispatch" in r["reason"], r
+    disp = audit_records(agent_audits["executor"])[-1]
+    assert disp["verdict"] == "BLOCK" and disp["blocked_by"] == "caller"

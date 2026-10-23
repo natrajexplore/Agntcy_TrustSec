@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from agenttrustsec.audit.log import AuditLog
+from agenttrustsec.authz.broker import TokenBroker
 from agenttrustsec.authz.gate import Gate
 from agenttrustsec.authz.intent import BaselineIntentChecker
 from agenttrustsec.authz.tbac import TbacPolicy
@@ -30,8 +31,13 @@ def audit(tmp_path):
 
 
 @pytest.fixture
-def gate(verifier, policy, audit):
-    return Gate(verifier, policy, BaselineIntentChecker(), audit)
+def broker():
+    return TokenBroker(secrets.token_bytes(32))
+
+
+@pytest.fixture
+def gate(verifier, policy, audit, broker):
+    return Gate(verifier, policy, BaselineIntentChecker(), audit, approvals=broker)
 
 
 @pytest.fixture

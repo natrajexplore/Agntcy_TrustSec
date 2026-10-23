@@ -6,6 +6,8 @@
 # keywords      -> baseline relevance check; replaced by semantic checker in P4
 # audience      -> external data source this tool reaches. On ALLOW the broker mints a
 #                  short-lived, single-use token for exactly this audience + tool.
+# requires_approval -> (P5d) the call must carry a single-use approval token minted by intake
+#                  after the reviewer pool approved exactly these args (device + lines).
 # scoped_args   -> (P4b, T6) argument(s) naming a TARGET (device, IP). Each value must be
 #                  named in the sealed user request, or the call is BLOCKED. REQUIRED for
 #                  every tool — `[]` if it has no target args; undeclared = BLOCK (D5).
@@ -45,6 +47,7 @@ tools:
     keywords: [push, apply, change, configure, deploy, remove, add, acl, acls]
     scoped_args: [device]
     description: Push configuration lines to a device (CHANGE)
+    requires_approval: true
 
   lookup_threat_intel:
     change: false

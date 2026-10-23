@@ -46,14 +46,14 @@ def run(coro):
 
 
 async def _call(server, verifier, broker, session, agent_id, role, tool, args,
-                badge="valid", server_id=SERVER_ID):
+                badge="valid", server_id=SERVER_ID, approval=None):
     b = verifier.issue(agent_id, role) if badge == "valid" else badge
     token = session if isinstance(session, str) else broker.seal_session(session)
     async with Client(server) as c:
         tc = TrustedClient(c, agent_id=agent_id, badge=b, session_token=token,
                            verifier=verifier, server_id=server_id)
         try:
-            return await tc.call(tool, args)
+            return await tc.call(tool, args, approval=approval)
         except Exception as e:  # re-raise outside the client's task group
             err = e
     raise err
@@ -76,6 +76,27 @@ def test_T5_executor_push_during_read_session_over_mcp(server, verifier, broker)
                   "push_config", PUSH))
     assert e.value.blocked_by == "intent"
     assert netops.PUSHED == []
+
+
+CHANGE = Session("Remove the permit ip any any rule from the ACL on edge-fw-01", Intent.CHANGE)
+
+
+def test_E3_approved_push_over_mcp_once(server, verifier, broker, audit):
+    tok = broker.mint_approval("CR-1001", PUSH["device"], PUSH["lines"], CHANGE.session_id, ["reviewer-01"])
+    r = run(_call(server, verifier, broker, CHANGE, "executor-01", "executor", "push_config", PUSH,
+                  approval=tok))
+    assert not r.is_error and netops.PUSHED == [PUSH]
+    with pytest.raises(McpBlocked) as e:                                  # same approval replayed
+        run(_call(server, verifier, broker, CHANGE, "executor-01", "executor", "push_config", PUSH,
+                  approval=tok))
+    assert e.value.blocked_by == "approval" and netops.PUSHED == [PUSH]
+    assert tok not in json.dumps(audit.read_all())
+
+
+def test_E3_push_without_approval_blocked_over_mcp(server, verifier, broker):
+    with pytest.raises(McpBlocked) as e:
+        run(_call(server, verifier, broker, CHANGE, "executor-01", "executor", "push_config", PUSH))
+    assert e.value.blocked_by == "approval" and netops.PUSHED == []
 
 
 @pytest.mark.parametrize("badge", [None, "forged"])

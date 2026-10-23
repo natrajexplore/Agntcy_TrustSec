@@ -99,11 +99,13 @@ def broker_from_env() -> TokenBroker:
     return TokenBroker(key)
 
 
-def make_gate(audit_path: Path, peer: PeerBinding | None, semantic=None) -> Gate:
+def make_gate(audit_path: Path, peer: PeerBinding | None, semantic=None,
+              approvals: TokenBroker | None = None) -> Gate:
     verifier = AgntcyBadgeVerifier(load_role_map(IDENTITIES, "agents"),
                                    key_thumbprints=load_key_thumbprints(IDENTITIES))
     return Gate(verifier, TbacPolicy.from_yaml(ROOT / "policies" / "tbac.yaml"),
-                BaselineIntentChecker(semantic), AuditLog(audit_path), peer=peer)
+                BaselineIntentChecker(semantic), AuditLog(audit_path), peer=peer,
+                approvals=approvals)
 
 
 class LlmUnavailable(Exception):
@@ -169,7 +171,7 @@ async def _serve_slim(args: argparse.Namespace) -> int:
     badge = fetch_server_badge(args.node, args.server_id)
     broker = broker_from_env()
     llm, llm_model = local_llm_matcher()
-    gate = make_gate(args.audit, PeerBinding(trust), semantic=llm)
+    gate = make_gate(args.audit, PeerBinding(trust), semantic=llm, approvals=broker)
     server = build_server(args.name, gate, broker, badge, _registry(broker))
     name = slim_name(args.server_id)
     endpoint = await slim.connect(name, slim.jwt_identity(pem, name, trust), args.slim)

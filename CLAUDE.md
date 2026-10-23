@@ -52,9 +52,9 @@ src/agenttrustsec/
   identity/keys.py     # RFC 7638 thumbprints of the agent keys badges bind (P3)
   authz/tbac.py        # Deterministic role→tool policy engine (deny by default)
   authz/intent.py      # Semantic intent checker (baseline now, embeddings/LLM later)
-  authz/gate.py        # Combines badge + [peer] + TBAC + intent → ALLOW/BLOCK, writes audit
+  authz/gate.py        # Combines badge + [peer] + TBAC + intent + [approval] → ALLOW/BLOCK, writes audit
   authz/peer.py        # P3: transport identity must hold the key the badge binds
-  authz/broker.py      # Seals sessions at intake; mints scoped single-use access tokens
+  authz/broker.py      # Seals sessions; mints single-use access + change-approval tokens
   mcpgate/server.py    # Gate as MCP (mcp 2.x) server middleware; stamps server badge
   mcpgate/client.py    # Agent-side MCP client: sends creds, verifies server badge
   mcpgate/serve.py     # Gateway runner: SLIM for tool calls (peer check ON); HTTP = issuance only
@@ -62,7 +62,7 @@ src/agenttrustsec/
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
   review/              # P5a: RuleGate's deterministic firewall-change review core (no CrewAI/LLM)
-  agents/              # P5: runtime.py (identity + SLIM + verified gateway client), reader.py, ...
+  agents/              # P5: runtime.py, jobserver.py (caller gate), intake/reader/reviewer/executor.py
   transport/slim.py    # MCP over SLIM (MLS P2P); reports + pins the peer, gate decides
   transport/slim_group.py # Attested MLS group sessions: admission gate before any broadcast
   authz/groups.py      # Group admission: badge -> peer -> group policy (deny by default)
@@ -71,6 +71,7 @@ policies/groups.yaml   # Who may moderate / join each SLIM group channel
 policies/identities.yaml # Verified badge id -> role (ISE authz policy assigning SGT)
 policies/trust-jwks.json # PUBLIC keys SLIM may accept (binding enforced by the peer check)
 scenarios/             # Attack / demo scenarios (rogue agent etc.)
+lab/changes/           # Change orders (device + exact lines + RuleGate CR) for the change path
 lab/identity/          # Lab Identity Node compose, OASF records, revoke_badge.py
 eval/                  # ASTRA-based evaluation of the intent checker
 tests/                 # pytest — must stay green
@@ -119,7 +120,9 @@ tests/                 # pytest — must stay green
       vendored as `review/`, `review_change` runs it (78 ported RuleGate tests pass). P5b done:
       `agents/runtime.py` + `agents/reader.py` (live through the real gateway). P5c1 done: intake
       (seal + deterministic plan + dispatch) and reader job server behind a caller gate
-      (`agents/jobserver.py`, only intake may dispatch). Next: P5c2/P5d reviewer + executor. Real agents: intake, reader (pyATS / mock), reviewer (port the
+      (`agents/jobserver.py`, only intake may dispatch). P5c2+P5d done: attested reviewer group,
+      `agents/reviewer.py` + `agents/executor.py`, single-use approval token for `push_config`
+      (gate `approval` check, E3); live CR-1001 pushed, CR-1003 rejected. Next: P5e. Real agents: intake, reader (pyATS / mock), reviewer (port the
       CrewAI Palo Alto / FTD change reviewer), executor. Add the rogue agent.
 - [ ] **P6 Observe & benchmark** — dashboard of ALLOW/BLOCK decisions; latency and
       block-rate numbers (optionally via `outshift-open/mas-lab`); README diagrams.

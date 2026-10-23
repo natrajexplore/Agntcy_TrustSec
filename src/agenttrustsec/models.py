@@ -54,6 +54,7 @@ class ToolCall:
     session: Session
     args: dict[str, Any] = field(default_factory=dict)
     peer: TransportPeer | None = None   # set by the SLIM transport; None in-process
+    approval: str | None = None         # P5d: reviewer-approval token (never audited)
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class Decision:
             "user_prompt": self.call.session.user_prompt,
             "agent_id": self.call.agent_id,
             "badge_presented": self.call.badge is not None,
+            "approval_presented": self.call.approval is not None,
             "peer": ({"source_name": self.call.peer.source_name,
                       "subject": self.call.peer.subject} if self.call.peer else None),
             "verified_role": self.verified_role,

@@ -131,14 +131,49 @@ any/any → REJECT, score 100 (fail-safe).
   badge and key trying to dispatch to the reader → `caller` BLOCK**; unplannable request
   refused. Full suite 408 passed with the lab up.
 
+## 5e. P5c2 + P5d as built (2026-10-23) — reviewer group, executor, approval token (E3)
+
+* **Approval token (E3)** — `authz/broker.py::mint_approval / redeem_approval`: HMAC token
+  (`typ: approval`) bound to `change_id` + device + SHA-256 of the exact ordered lines + the
+  change session id, with the approver ids, 15 min ttl, **single use** (jti). `policies/tbac.yaml`:
+  `push_config: requires_approval: true` (a test pins: every change tool requires it).
+* **Gate** (`authz/gate.py`): new last check `approval`, only for `requires_approval` tools.
+  SKIPPED (not consumed) if anything earlier failed; no approval authority configured → FAIL;
+  wrong device / lines / session, expired, forged, wrong type, replay → FAIL; any other error →
+  ERROR. All BLOCK. The token is never audited (`approval_presented: true|false` only). The MCP
+  gateway reads it from `_meta["agenttrustsec/approval"]`; `serve.py` gives the gate the broker.
+* `agents/reviewer.py serve`: waits for invites on `agenttrustsec/lab/reviewers`, verifies
+  intake as moderator (badge + key + moderator role) before attesting, runs `review_change`
+  through the gateway with the **read** session intake sealed for the review, replies to intake
+  only. Approves only RuleGate `APPROVE` + no human review + same change_id + matching lines
+  digest; APPROVE_WITH_CONDITIONS, errors, blocks, bad proposals → reject.
+* `agents/executor.py serve`: `run_change(device, lines, session, approval)` behind the caller
+  gate (only intake dispatches); forwards to `push_config`, decides nothing. Forwarded session
+  and approval are never written to its dispatch audit.
+* `agents/intake.py --change-file lab/changes/cr-XXXX.yaml "<request>"`: change order = device
+  (must be the one device the request names) + exact lines + RuleGate change request. Intake
+  moderates an attested group of every registered reviewer, broadcasts the proposal, and
+  requires a **unanimous** approval for that proposal id + lines digest (no reviewer admitted,
+  missing / stale / mismatched reply = no). Then it mints the approval for the change session and
+  dispatches to executor-01.
+* Live (real gateway, local LLM): **CR-1001 → reviewer APPROVE → executor push ALLOW**
+  (intent `semantic: llm allow`, approval PASS CR-1001); **CR-1003 any/any → reviewer REJECT,
+  only `review_change` reached the gateway, nothing pushed**; executor without approval / with
+  an approval for other lines / replaying a used one → `approval` BLOCK; reader-01 dispatching to
+  the executor → `caller` BLOCK. Full suite 465 passed with the lab up.
+* **Known limits:** (1) reviewers judge the RuleGate change request and approve the lines digest
+  they were shown, but nothing yet proves the lines *implement* that request (needs a
+  deterministic CR → PAN-OS / FMC renderer; backlog). (2) Redeemed jtis live in the gateway's
+  memory; a restart forgets them (15 min ttl limits the window). (3) One reviewer in the lab pool.
+
 ## 6. Work order (one PR each)
 
 * **P5a** ✅ vendor RuleGate core → `review/`; `review_change` uses it; tests incl. RuleGate's
   own sample CRs (CR-1003 any/any must be rejected).
 * **P5b** ✅ agent runtime (identity, SLIM endpoint, `TrustedClient`) + `reader-01` + CLI.
 * **P5c1** ✅ `intake-01`: session sealing, intent, planning, dispatch to an authenticated reader.
-* **P5c2** intake proposes changes to the attested reviewer group (with P5d's reviewer).
-* **P5d** `reviewer-01` + `executor-01` + approval token (E3) in broker and gate.
+* **P5c2** ✅ intake proposes changes to the attested reviewer group (with P5d's reviewer).
+* **P5d** ✅ `reviewer-01` + `executor-01` + approval token (E3) in broker and gate.
 * **P5e** rogue scenarios + one end-to-end demo script on the live lab; README walkthrough.
 
 ## 7. Decisions

@@ -38,9 +38,9 @@ def test_planner_refuses_what_it_cannot_map_safely(request_text, why):
         plan(request_text)
 
 
-def test_change_requests_are_not_dispatched_yet():
+def test_change_requests_need_a_change_file():
     out = asyncio.run(handle("Remove the 'permit ip any any' entry from the ACL on edge-fw-01"))
-    assert out["ok"] is False and out["intent"] == "change" and "reviewer pool" in out["error"]
+    assert out["ok"] is False and out["intent"] == "change" and "--change-file" in out["error"]
 
 
 def test_dry_run_plans_without_touching_the_lab():

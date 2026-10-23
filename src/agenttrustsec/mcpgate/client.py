@@ -22,7 +22,7 @@ from agenttrustsec.authz.peer import PeerBinding
 from agenttrustsec.identity.badge import BadgeError, BadgeVerifier
 from agenttrustsec.models import TransportPeer
 from agenttrustsec.mcpgate.server import (
-    META_AGENT, META_BADGE, META_DECISION, META_SERVER_BADGE, META_SESSION,
+    META_AGENT, META_APPROVAL, META_BADGE, META_DECISION, META_SERVER_BADGE, META_SESSION,
 )
 
 SERVER_ROLE = "mcp_server"
@@ -56,8 +56,11 @@ class TrustedClient:
         self.verifier = verifier
         self.server_id = server_id
 
-    async def call(self, tool: str, args: dict[str, Any] | None = None) -> CallToolResult:
+    async def call(self, tool: str, args: dict[str, Any] | None = None,
+                   approval: str | None = None) -> CallToolResult:
         meta = {META_AGENT: self.agent_id, META_SESSION: self.session_token}
+        if approval is not None:
+            meta[META_APPROVAL] = approval
         if self.badge is not None:
             meta[META_BADGE] = self.badge
         result = await self.client.call_tool(tool, args or {}, meta=meta)

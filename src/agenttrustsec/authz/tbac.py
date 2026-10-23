@@ -28,6 +28,15 @@ class ToolSpec:
     # P4b: args naming a target (device/IP) that must appear in the user request.
     # None = undeclared -> the intent check BLOCKs every call (deny by default, D5).
     scoped_args: tuple[str, ...] | None = None
+    # P5d (E3): the call must carry a single-use reviewer-approval token for these exact args.
+    requires_approval: bool = False
+
+
+def _bool_flag(name: str, spec: dict, key: str) -> bool:
+    value = spec.get(key, False)
+    if not isinstance(value, bool):
+        raise PolicyError(f"{name}: {key} must be true or false")
+    return value
 
 
 class TbacPolicy:
@@ -62,6 +71,7 @@ class TbacPolicy:
                 description=spec.get("description", ""),
                 audience=spec.get("audience"),
                 scoped_args=tuple(scoped) if scoped is not None else None,
+                requires_approval=_bool_flag(name, spec, "requires_approval"),
             )
         return cls(tools)
 

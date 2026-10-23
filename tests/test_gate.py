@@ -10,8 +10,13 @@ from agenttrustsec.tools import netops
 PUSH = {"device": "edge-fw-01", "lines": ["permit ip any any"]}
 
 
-def call(agent, badge, tool, session, args=None):
-    return ToolCall(agent, badge, tool, session, args or {"device": "edge-fw-01"})
+def call(agent, badge, tool, session, args=None, approval=None):
+    return ToolCall(agent, badge, tool, session, args or {"device": "edge-fw-01"}, approval=approval)
+
+
+def approve(broker, session, args=PUSH):
+    """What intake mints after the reviewer pool approved exactly this change (P5d)."""
+    return broker.mint_approval("CR-T", args["device"], args["lines"], session.session_id, ["reviewer-01"])
 
 
 def test_happy_path_read(gate, verifier, read_session):
@@ -21,9 +26,10 @@ def test_happy_path_read(gate, verifier, read_session):
     assert [c.status for c in d.checks] == [Status.PASS] * 3
 
 
-def test_happy_path_change(gate, verifier, change_session):
+def test_happy_path_change(gate, verifier, broker, change_session):
     out = gate.execute(call("executor-01", verifier.issue("executor-01", "executor"),
-                            "push_config", change_session, PUSH), netops.REGISTRY)
+                            "push_config", change_session, PUSH, approve(broker, change_session)),
+                       netops.REGISTRY)
     assert "pushed" in out
     assert len(netops.PUSHED) == 1
 
@@ -95,7 +101,8 @@ def test_one_audit_record_per_call(gate, verifier, read_session, audit):
     recs = audit.read_all()
     assert [r["verdict"] for r in recs] == ["ALLOW", "BLOCK", "BLOCK"]
     for r in recs:
-        assert {c["name"] for c in r["checks"]} == {"badge", "tbac", "intent"}
+        extra = {"approval"} if r["tool"] == "push_config" else set()     # requires_approval (P5d)
+        assert {c["name"] for c in r["checks"]} == {"badge", "tbac", "intent"} | extra
         assert "badge" not in r or r.get("badge") is None  # raw badge never logged
         assert b not in str(r)
 

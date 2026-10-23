@@ -37,6 +37,7 @@ META_BADGE = "agenttrustsec/badge"
 META_SESSION = "agenttrustsec/session"
 META_SERVER_BADGE = "agenttrustsec/server_badge"
 META_DECISION = "agenttrustsec/decision"
+META_APPROVAL = "agenttrustsec/approval"   # P5d: single-use reviewer approval (change tools)
 
 # Everything else (resources/read, prompts/*, completion/*, ...) is refused.
 # resources/list is served for AGNTCY badge discovery (`identity badge issue mcp`); this
@@ -81,7 +82,9 @@ class GateMiddleware:
             status = Status.FAIL if isinstance(e, TokenError) else Status.ERROR
             return self._refuse(call, CheckResult("session", status, str(e)))
 
-        decision = self.gate.authorize(ToolCall(agent_id, badge, tool, session, args, peer=peer))
+        approval = meta.get(META_APPROVAL) if isinstance(meta.get(META_APPROVAL), str) else None
+        decision = self.gate.authorize(ToolCall(agent_id, badge, tool, session, args, peer=peer,
+                                                approval=approval))
         if decision.verdict is not Verdict.ALLOW:
             return _blocked(decision)
 

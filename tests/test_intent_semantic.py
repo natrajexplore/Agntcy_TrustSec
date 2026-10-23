@@ -59,17 +59,21 @@ def test_read_tools_keep_the_keyword_check(policy):
 
 
 def test_llm_error_is_gate_error_block(policy, verifier, audit):
+    # no approval authority: the intent ERROR must block on its own (approval is SKIPPED)
     g = Gate(verifier, policy, BaselineIntentChecker(FakeMatcher(error=TimeoutError("ollama"))), audit)
     d = g.authorize(ToolCall("executor-01", verifier.issue("executor-01", "executor"),
                              "push_config", CHANGE, PUSH))
-    assert d.verdict is Verdict.BLOCK and d.checks[-1].status is Status.ERROR
-    assert "TimeoutError" in audit.read_all()[0]["checks"][-1]["reason"]
+    intent = next(c for c in d.checks if c.name == "intent")
+    assert d.verdict is Verdict.BLOCK and d.blocked_by == "intent" and intent.status is Status.ERROR
+    rec = next(c for c in audit.read_all()[0]["checks"] if c["name"] == "intent")
+    assert "TimeoutError" in rec["reason"]
 
 
-def test_gate_allows_change_only_with_llm_pass(policy, verifier, audit):
-    g = Gate(verifier, policy, BaselineIntentChecker(FakeMatcher(allow=True)), audit)
+def test_gate_allows_change_only_with_llm_pass(policy, verifier, audit, broker):
+    g = Gate(verifier, policy, BaselineIntentChecker(FakeMatcher(allow=True)), audit, approvals=broker)
+    ok = broker.mint_approval("CR-T", PUSH["device"], PUSH["lines"], CHANGE.session_id, ["reviewer-01"])
     d = g.authorize(ToolCall("executor-01", verifier.issue("executor-01", "executor"),
-                             "push_config", CHANGE, PUSH))
+                             "push_config", CHANGE, PUSH, approval=ok))
     assert d.verdict is Verdict.ALLOW
 
 

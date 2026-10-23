@@ -110,3 +110,36 @@ class TokenBroker:
                 raise TokenError("token already used (replay)")
             self._redeemed.add(c["jti"])
         return c
+
+    # --- change approvals (P5d, E3) ------------------------------------------
+    def mint_approval(self, change_id: str, device: str, lines: list[str], session_id: str,
+                      approvers: list[str], ttl_s: int = 900) -> str:
+        """Issued by intake only after the reviewer pool approved THIS change. Bound to the
+        change, the device, the exact lines and the change session; single use."""
+        now = int(time.time())
+        return self._sign({
+            "iss": self.issuer, "typ": "approval", "iat": now, "exp": now + ttl_s,
+            "change_id": change_id, "device": device, "lines": lines_digest(lines),
+            "sid": session_id, "approvers": sorted(approvers), "jti": secrets.token_hex(8),
+        })
+
+    def redeem_approval(self, token: str | None, device: str, lines: list[str] | None,
+                        session_id: str) -> dict:
+        """Called by the gate for tools with requires_approval. Any mismatch -> TokenError."""
+        c = self._open(token, "approval")
+        if c.get("device") != device:
+            raise TokenError(f"approval is for device {c.get('device')!r}, not {device!r}")
+        if not isinstance(lines, list) or c.get("lines") != lines_digest(lines):
+            raise TokenError("lines differ from the approved change")
+        if c.get("sid") != session_id:
+            raise TokenError("approval belongs to a different session")
+        with self._lock:
+            if c["jti"] in self._redeemed:
+                raise TokenError("approval already used (replay)")
+            self._redeemed.add(c["jti"])
+        return c
+
+
+def lines_digest(lines: list[str]) -> str:
+    """SHA-256 over the exact ordered config lines (what the reviewers approved)."""
+    return hashlib.sha256(json.dumps(list(lines), separators=(",", ":")).encode()).hexdigest()

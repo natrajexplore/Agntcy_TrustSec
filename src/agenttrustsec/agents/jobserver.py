@@ -29,7 +29,7 @@ from agenttrustsec.models import CheckResult, Decision, Intent, Session, Status,
 from agenttrustsec.transport.peer import CURRENT_PEER
 
 _PASSTHROUGH = {"initialize", "server/discover", "ping", "tools/list"}
-SECRET_ARGS = {"session"}           # forwarded credentials: never written to the audit log
+SECRET_ARGS = {"session", "approval"}   # forwarded credentials: never written to the audit log
 
 
 def authorize_caller(worker: str, verifier: BadgeVerifier, binding: PeerBinding,

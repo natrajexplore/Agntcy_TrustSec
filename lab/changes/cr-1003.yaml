@@ -1,0 +1,24 @@
+# Lab change order (P5d): Any/any at the top of the rulebase: RuleGate REJECT -> no approval -> never pushed.
+# change = RuleGate change request (cr-1003-panos-any-any.yaml, target dropped: the device decides);
+# lines  = the exact config intake proposes, reviewers see and the approval token binds.
+device: edge-fw-01
+lines:
+- set rulebase security rules CR-1003 from web-dmz to any source any destination any application any service any action allow log-end yes
+- move rulebase security rules CR-1003 top
+change:
+  change_id: CR-1003
+  ticket_ref: CHG0045844
+  requester: web-ops
+  business_justification: Troubleshooting connectivity, just open any/any for now
+  request:
+    action: allow
+    source_zone: web-dmz
+    source: any
+    destination_zone: any
+    destination: any
+    application: any
+    service: any
+    logging: true
+    placement: top
+  temporary: true
+  expiry: 2026-10-11

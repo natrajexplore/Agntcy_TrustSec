@@ -78,6 +78,8 @@ Design principles (non-negotiable, see `CLAUDE.md`):
    [2]  tbac    role allowed for this tool                         (SGACL)
    [3]  intent  target (device/IP) named in the request (scope); change tools need a
                 `change` session + a local-LLM verdict; reads need keyword relevance
+   [4]  approval  push_config only: single-use reviewer approval bound to change id +
+                device + exact lines + session                     (CoA after posture)
    ALL pass → ALLOW (+ scoped token for external APIs)   else BLOCK
    → exactly one audit record (peer identity included, tokens never)
 ```
@@ -114,6 +116,11 @@ Live attack matrix against the real gateway process (all stopped as designed):
 | Impostor gateway with a copied server badge | agent rejects the result |
 | Impostor joins the reviewer group under a reviewer's name | admission `peer` — removed before any broadcast |
 | Fake moderator (valid agent, wrong role) invites reviewers | reviewers refuse it before attesting |
+| Genuine reader calls `push_config`, even with a change session and an approval | `tbac` |
+| Executor pushes lines other than the ones the reviewers approved | `approval` — lines differ |
+| Executor presents the same approval twice | `approval` — replay |
+| A worker agent (not intake) tries to give another worker a job | `caller` — confused-deputy guard |
+| Any/any change request (RuleGate CR-1003) | reviewer rejects → no approval → never pushed |
 
 ## Quick start
 
@@ -137,6 +144,51 @@ export IDENTITY_NODE_GRPC_SERVER_URL=localhost:4001 IDENTITY_NODE_USE_SSL=0
 python -m agenttrustsec.mcpgate.serve --transport slim --server-id <gateway metadata id>
 ```
 
+## Live demo (P5): real agents, real attacks, one table
+
+One command runs the whole story on the lab: it starts the gated gateway and the reader,
+reviewer and executor agents (all dial OUT to SLIM), runs the legitimate flows and the
+seven rogue attacks, prints each step against its expectation plus an ISE Live Logs view of
+the gateway's decisions, and stops everything it started. Exit code 1 on any mismatch.
+
+```bash
+docker start identity-postgres && sleep 4 && docker start identity-node   # lab Identity Node
+docker compose -f lab/slim/docker-compose.yml start                        # lab SLIM node
+ollama serve   # if not already running; model qwen2.5:7b-instruct (pinned digest)
+python -m agenttrustsec.demo_live            # full run
+python -m agenttrustsec.demo_live --quick    # skips the two attacks that need extra LLM verdicts
+```
+
+```
+== Act 1 rogue at the gateway ==
+  ✔ #1 trusted key + copied reader badge        BLOCK peer       peer token not signed by the badge's key ...
+  ✔ #2 genuine reader calls push_config         BLOCK tbac       role 'reader' not permitted for 'push_config'
+  ✔ #3 executor pushes in a read session        BLOCK intent     'push_config' is a change tool but session intent is 'read'
+  ✔ #4 approval for other lines                 BLOCK approval   lines differ from the approved change
+  ✔ #5 approval used twice                      BLOCK approval   approval already used (replay)
+  ✔ #7 revoked agent                            BLOCK badge      identity node rejected badge: ... revoked.
+== Act 2 reviewer group ==
+  ✔ #6 impostor joins under reviewer's name     BLOCK group/peer peer token not signed by the badge's key ...
+== Act 3 executor up ==
+  ✔ reader-01 gives the executor a job          BLOCK caller     role 'reader' may not dispatch to executor-01
+== Act 4 all agents up ==
+  ✔ read: intake -> reader -> show_acl          ALLOW -          job done
+  ✔ change CR-1003 any/any                      BLOCK review     reviewer-01 rejected: RuleGate decision 'REJECT'
+  ✔ change CR-1001 clean -> push                ALLOW -          pushed after unanimous review
+RESULT: all expectations met
+```
+
+How a change flows: intake seals a `change` session, opens an **attested MLS group** of the
+reviewers and broadcasts the proposal (device + exact lines + RuleGate change request).
+Each reviewer runs RuleGate's deterministic review **through the gateway** and replies. Only on a
+unanimous clean `APPROVE` does intake mint the single-use approval and hand it to the executor,
+whose `push_config` still passes every gate check. Every step is audited (the run's trails land
+in `audit/demo-<time>/`: gateway, intake group admissions, each agent's dispatch log).
+
+Measured on the 15.5 GB dev laptop (cold model): 8.9 GB in use before the run, **14.2 GB
+peak** (+5.3 GB, almost all of it the 5.5 GB local model), ~50 s for the full run. Acts 1–3 run
+before the impersonated agents start because SLIM routes by name.
+
 Issuing badges and keys for your own lab: runbook in `docs/notes-p1.md` (Identity steps
 1–9) and `docs/P3-design.md` §7. Keys live in `~/.agenttrustsec/keys/`, never in the repo.
 
@@ -151,16 +203,20 @@ src/agenttrustsec/
   authz/tbac.py          role → tool policy (deny by default)
   authz/intent.py        intent checker (baseline now; semantic in P4)
   authz/peer.py          peer check: transport identity must hold the badge-bound key
-  authz/gate.py          badge → peer → TBAC → intent → ALLOW/BLOCK + audit
-  authz/broker.py        sealed sessions; single-use scoped tokens
+  authz/gate.py          badge → peer → TBAC → intent → [approval] → ALLOW/BLOCK + audit
+  authz/broker.py        sealed sessions; single-use scoped tokens and change approvals
   mcpgate/               gate as MCP middleware, agent-side client, gateway runner
   transport/slim.py      MCP over SLIM (MLS P2P); reports and pins the peer
   transport/slim_group.py  attested MLS group sessions (reviewer pool)
   authz/groups.py        group admission: badge → peer → group policy
   audit/log.py           JSONL audit writer
   tools/                 mock network tools and a mock external API
+  review/                RuleGate's deterministic firewall-change review core (PAN-OS / FTD)
+  agents/                runtime, caller gate (jobserver), intake, reader, reviewer, executor, rogue
+  demo.py  demo_live.py  offline scenario demo; end-to-end demo on the live lab
 policies/                tbac.yaml, identities.yaml, groups.yaml, trust-jwks.json (public keys)
-lab/                     Identity Node + SLIM compose files, key/revoke tools, probes
+lab/                     Identity Node + SLIM compose files, key/revoke tools, probes,
+                         agents.yaml (public agent ids), changes/ (lab change orders)
 scenarios/  eval/        attack/demo scenarios; ASTRA-based intent evaluation (P4)
 docs/                    ARCHITECTURE (threat model), notes-p1 (runbooks), P3-design
 tests/                   unit tests + live tests against the lab
@@ -176,7 +232,7 @@ tests/                   unit tests + live tests against the lab
 | P2 | Real AGNTCY badges: issue, verify, revoke | ✅ incl. the revocation-replay fix |
 | P3 | SLIM transport with key-bound identity | ✅ keys, adapter, peer check, gateway on SLIM, attested reviewer groups |
 | P4 | Intent: scope check + local LLM verifier for change tools, evaluated on ASTRA | ✅ |
-| P5 | Real agents: intake, reader (pyATS/mock), Palo Alto / FTD change reviewer, executor, rogue | ⏳ |
+| P5 | Real agents: intake, reader, RuleGate PAN-OS / FTD reviewer group, executor with approval tokens, rogue; live demo | ✅ |
 | P6 | Live decisions dashboard, latency and block-rate benchmarks, node admission control | ⏳ |
 
 ## Built on

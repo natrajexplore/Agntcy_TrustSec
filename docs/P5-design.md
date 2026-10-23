@@ -166,6 +166,28 @@ any/any → REJECT, score 100 (fail-safe).
   deterministic CR → PAN-OS / FMC renderer; backlog). (2) Redeemed jtis live in the gateway's
   memory; a restart forgets them (15 min ttl limits the window). (3) One reviewer in the lab pool.
 
+## 5f. P5e as built (2026-10-23) — rogue agent + live end-to-end demo (owner: full run, `--quick`)
+
+* `agents/rogue.py`: the attacks of §5 as a real agent (`attack <name>`, raw `gateway`,
+  `dispatch`, `group-impostor`), using real lab keys and copies of published badges; where an
+  attack needs a sealed session or an approval it acts as a lab stand-in with the broker key
+  (replaying genuine tokens). Replaces `tests/_slim_agent_child.py` / `_dispatch_child.py`; the
+  live tests call it. New live case: reader `push_config` with a change session AND an approval
+  → `tbac`.
+* `demo_live.py`: preflight (SLIM, Identity Node, keys, Ollama — refuses otherwise), starts the
+  gateway, runs four acts, prints expected vs actual + the gateway decisions as an ISE Live Logs
+  view (`*` = claimed identity never verified), stops every process, exit 1 on mismatch. Act
+  order is forced by SLIM routing by name: impersonation attacks run while the impersonated agent
+  is offline (acts 1–3: gateway-level attacks, group impostor vs the real intake change path,
+  rogue dispatch to the executor), then reader + reviewer start for the legitimate flows (act 4).
+  `--quick` skips #4/#5 (extra LLM verdicts).
+* Result: all 11 steps as expected. #6 end to end: intake proposes CR-1001, the impostor under
+  reviewer-01's name is refused by `peer`, no reviewer admitted → no approval → nothing pushed.
+* **E5 measured** (15.5 GB laptop, cold model): 8.9 GB in use before, 14.2 GB peak (+5.3 GB,
+  ≈ the 5.5 GB qwen2.5:7b), 49 s full run; warm model 36 s, +0.3 GB for gateway + 4 agents.
+  Fits, with ~1.3 GB headroom.
+* Full suite 484 passed with the lab up.
+
 ## 6. Work order (one PR each)
 
 * **P5a** ✅ vendor RuleGate core → `review/`; `review_change` uses it; tests incl. RuleGate's
@@ -174,7 +196,7 @@ any/any → REJECT, score 100 (fail-safe).
 * **P5c1** ✅ `intake-01`: session sealing, intent, planning, dispatch to an authenticated reader.
 * **P5c2** ✅ intake proposes changes to the attested reviewer group (with P5d's reviewer).
 * **P5d** ✅ `reviewer-01` + `executor-01` + approval token (E3) in broker and gate.
-* **P5e** rogue scenarios + one end-to-end demo script on the live lab; README walkthrough.
+* **P5e** ✅ rogue scenarios + one end-to-end demo script on the live lab; README walkthrough.
 
 ## 7. Decisions
 

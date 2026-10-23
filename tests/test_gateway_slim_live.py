@@ -74,7 +74,7 @@ def gateway(audit_path):
 
 def agent(**cfg):
     cfg = {"gateway_id": GW, **cfg}
-    out = subprocess.run([sys.executable, str(ROOT / "tests" / "_slim_agent_child.py"),
+    out = subprocess.run([sys.executable, "-m", "agenttrustsec.agents.rogue", "gateway",
                           json.dumps(cfg)], env=ENV, capture_output=True, text=True,
                          encoding="utf-8", errors="replace", timeout=120)
     line = next((ln for ln in out.stdout.splitlines() if ln.startswith("RESULT ")), None)
@@ -129,6 +129,14 @@ def test_revoked_agent_blocked_by_badge():
     r = agent(key="reader-01", slim_name=slim_name(REVOKED), claim=REVOKED, badge_id=REVOKED,
               tool="show_acl", args=ACL)
     assert r.get("blocked_by") == "badge" and "revoked" in r["reason"], r
+
+
+def test_genuine_reader_cannot_push_even_with_change_session_and_approval():
+    # P5e rogue #2: valid badge + key, change session, even a genuine approval -> TBAC (SGACL)
+    r = agent(key="reader-01", slim_name=slim_name(READER), claim=READER, badge_id=READER,
+              tool="push_config", args=PUSH, intent="change", approve=True,
+              prompt="Remove the permit any any rule on edge-fw-01")
+    assert r.get("blocked_by") == "tbac" and "not permitted" in r["reason"], r
 
 
 def test_genuine_executor_still_needs_change_intent():
@@ -206,7 +214,7 @@ class TestReaderJobs:
 
     def test_rogue_dispatch_to_reader_is_refused(self, reader_server, reader_audit):
         # executor-01: real badge, real key, mutual auth OK — but not allowed to give the reader work
-        r = run_json(str(ROOT / "tests" / "_dispatch_child.py"), "executor-01")
+        r = run_json("-m", "agenttrustsec.agents.rogue", "dispatch", "executor-01", "reader-01")
         assert r.get("blocked_by") == "caller" and "may not dispatch" in r["reason"], r
         disp = json.loads(reader_audit.read_text().splitlines()[-1])
         assert disp["verdict"] == "BLOCK" and disp["blocked_by"] == "caller"
@@ -304,7 +312,7 @@ def test_any_any_change_is_rejected_and_never_pushed(change_agents, agent_audits
 
 
 def test_rogue_dispatch_to_executor_is_refused(change_agents, agent_audits):
-    r = run_json(str(ROOT / "tests" / "_dispatch_child.py"), "reader-01", "executor-01")
+    r = run_json("-m", "agenttrustsec.agents.rogue", "dispatch", "reader-01", "executor-01")
     assert r.get("blocked_by") == "caller" and "may not dispatch" in r["reason"], r
     disp = audit_records(agent_audits["executor"])[-1]
     assert disp["verdict"] == "BLOCK" and disp["blocked_by"] == "caller"

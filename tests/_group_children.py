@@ -17,8 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from _slim_agent_child import current_badge, private_pem  # noqa: E402
 
+from agenttrustsec.agents.rogue import current_badge, private_pem  # noqa: E402
 from agenttrustsec.audit.log import AuditLog  # noqa: E402
 from agenttrustsec.authz.groups import GroupPolicy  # noqa: E402
 from agenttrustsec.authz.peer import PeerBinding, slim_name  # noqa: E402

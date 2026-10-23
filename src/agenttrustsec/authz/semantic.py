@@ -203,10 +203,14 @@ def _post(url: str, body: dict | None, timeout: float) -> dict:
 
 
 def ollama_judge(model: str = OLLAMA_MODEL, digest: str = OLLAMA_DIGEST, url: str = OLLAMA_URL,
-                 timeout: float = 120.0, seed: int = 7, keep_alive: str = "30m") -> Judge:
+                 timeout: float = 120.0, seed: int = 7, keep_alive: str = "2m",
+                 num_ctx: int = 8192) -> Judge:
     """Local Ollama chat with a JSON-schema `format` (structured output), temperature 0 and a
     fixed seed (reproducible). Checks the pinned model digest first. Network errors and
-    timeouts propagate -> the gate records ERROR -> BLOCK (D3). stdlib only, no new dependency."""
+    timeouts propagate -> the gate records ERROR -> BLOCK (D3). stdlib only, no new dependency.
+    `num_ctx` is set explicitly (Ollama silently truncates prompts longer than its window); a
+    prompt that fills >= 95% of it is reported as "truncated" -> the matcher denies.
+    `keep_alive` is short so the ~7 GB model leaves RAM soon after a run (15.5 GB laptop)."""
     tags = _post(f"{url}/api/tags", None, timeout=10)
     found = {m.get("name"): m.get("digest") for m in tags.get("models", [])}
     if found.get(model) != digest:
@@ -215,11 +219,15 @@ def ollama_judge(model: str = OLLAMA_MODEL, digest: str = OLLAMA_DIGEST, url: st
     def judge(system: str, user: str) -> JudgeReply:
         out = _post(f"{url}/api/chat", {
             "model": model, "stream": False, "keep_alive": keep_alive, "format": VERDICT_SCHEMA,
-            "options": {"temperature": 0, "seed": seed},
+            "options": {"temperature": 0, "seed": seed, "num_ctx": num_ctx},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }, timeout)
-        return JudgeReply(out.get("done_reason") or "", (out.get("message") or {}).get("content", ""),
-                          out.get("prompt_eval_count") or 0, out.get("eval_count") or 0)
+        prompt_tokens = out.get("prompt_eval_count") or 0
+        finish = out.get("done_reason") or ""
+        if prompt_tokens >= 0.95 * num_ctx:          # prompt was (likely) cut: never judge a partial
+            finish = "truncated"
+        return JudgeReply(finish, (out.get("message") or {}).get("content", ""),
+                          prompt_tokens, out.get("eval_count") or 0)
     return judge
 
 

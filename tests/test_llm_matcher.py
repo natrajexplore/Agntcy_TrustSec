@@ -102,7 +102,8 @@ def test_ollama_adapter_request_shape(monkeypatch):
     assert tags_url == chat_url.replace("/api/chat", "/api/tags") == "http://127.0.0.1:11434/api/tags"
     assert body["model"] == OLLAMA_MODEL == "qwen2.5:7b-instruct" and body["stream"] is False
     assert body["format"] == VERDICT_SCHEMA and VERDICT_SCHEMA["additionalProperties"] is False
-    assert body["options"] == {"temperature": 0, "seed": 7}
+    assert body["options"] == {"temperature": 0, "seed": 7, "num_ctx": 8192}
+    assert body["keep_alive"] == "2m"
     assert body["messages"] == [{"role": "system", "content": "SYS"}, {"role": "user", "content": "USER"}]
     assert timeout == 90.0
     assert reply == JudgeReply("stop", '{"verdict":"allow","reason":"x"}', 184, 31)
@@ -118,3 +119,11 @@ def test_ollama_refuses_a_changed_or_missing_model(monkeypatch, digest):
 def test_ollama_truncated_answer_is_a_deny(monkeypatch):
     fake_ollama(monkeypatch, reply={"done_reason": "length", "message": {"content": '{"verdict":"all'}})
     assert LlmMatcher(ollama_judge()).match(TASK, ACL).allow is False
+
+
+def test_ollama_prompt_filling_the_context_window_is_a_deny(monkeypatch):
+    # Ollama silently truncates over-long prompts; a verdict on a partial prompt is not trusted
+    fake_ollama(monkeypatch, reply={"done_reason": "stop", "prompt_eval_count": 7900, "eval_count": 20,
+                                    "message": {"content": '{"verdict":"allow","reason":"x"}'}})
+    r = LlmMatcher(ollama_judge(num_ctx=8192)).match(TASK, ACL)
+    assert r.allow is False and "truncated" in r.reason

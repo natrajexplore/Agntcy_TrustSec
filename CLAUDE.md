@@ -61,6 +61,8 @@ src/agenttrustsec/
   mcpgate/serve.py     # Gateway runner: SLIM for tool calls (peer check ON); HTTP = issuance only
   mcpgate/inventory.py # Signed tool inventory (MCPServerBadge) vs served tools/list: drift = refuse
   audit/log.py         # JSONL audit writer
+  dashboard.py         # P6b decisions dashboard (+ --serve, Host/Origin/token-hardened, 127.0.0.1 only)
+  controlcenter.py     # Control Center: 11 layers + audit, status from evidence only, read-only probes
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
   review/              # P5a: RuleGate's deterministic review core (no CrewAI/LLM); render.py = CR -> lines (item A)
@@ -148,6 +150,8 @@ pytest -q
 python -m agenttrustsec.demo      # runs scenarios/rogue_agent.yaml against the gate
 python -m agenttrustsec.demo_live [--quick]   # P5e end-to-end on the live lab (needs lab + Ollama)
 python -m agenttrustsec.dashboard [run dir] [--serve]   # P6b decisions dashboard from audit trails
+#   --serve also serves the Control Center at http://127.0.0.1:8765/control (per-layer status + read-only probes)
+python -m agenttrustsec.controlcenter status [run dir]   # same Control Center view in the terminal
 # P3 gateway over SLIM (needs both lab nodes + keys): see docs/P3-design.md §7
 python -m agenttrustsec.mcpgate.serve --transport slim --server-id <gateway metadata id>
 ```

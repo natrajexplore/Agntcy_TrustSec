@@ -1,0 +1,93 @@
+{
+  "_comment": "Sanitized FMC export (prefilter + access rules, expanded=true, plus referenced objects). RFC 1918 / RFC 5737 addresses and fictional names only.",
+  "accessPolicy": {
+    "name": "DC-Edge-ACP",
+    "id": "00505680-1a2b-0ed3-0000-000000001000",
+    "defaultAction": "BLOCK",
+    "defaultLogEnd": true
+  },
+  "objects": {
+    "networks": {
+      "user-lan": {"type": "Network", "value": "10.10.0.0/16"},
+      "dc-web-farm": {"type": "Network", "value": "10.60.1.0/24"},
+      "dc-backup-net": {"type": "Network", "value": "10.60.5.0/24"},
+      "backup-servers": {"type": "Network", "value": "10.10.200.0/28"},
+      "pci-cde-net": {"type": "Network", "value": "10.70.0.0/24"},
+      "sftp-dmz-01": {"type": "Host", "value": "172.16.20.10"},
+      "vendor-portal": {"type": "FQDN", "value": "portal.vendor.example"}
+    },
+    "networkGroups": {},
+    "dynamicObjects": [],
+    "ports": {
+      "HTTPS": [{"protocol": "6", "port": "443"}],
+      "HTTP": [{"protocol": "6", "port": "80"}],
+      "RSYNC": [{"protocol": "6", "port": "873"}]
+    },
+    "portGroups": {
+      "WEB": ["HTTP", "HTTPS"]
+    }
+  },
+  "prefilterRules": [
+    {
+      "id": "00505680-1a2b-0ed3-0000-000000002001",
+      "name": "Fastpath-Backup-Replication",
+      "action": "FASTPATH",
+      "enabled": true,
+      "sourceInterfaces": {"objects": [{"name": "inside", "type": "SecurityZone"}]},
+      "destinationInterfaces": {"objects": [{"name": "dc", "type": "SecurityZone"}]},
+      "sourceNetworks": {"objects": [{"name": "backup-servers", "type": "Network"}]},
+      "destinationNetworks": {"objects": [{"name": "dc-backup-net", "type": "Network"}]},
+      "destinationPorts": {"objects": [{"name": "RSYNC", "type": "ProtocolPortObject"}]},
+      "logEnd": true
+    }
+  ],
+  "items": [
+    {
+      "id": "00505680-1a2b-0ed3-0000-000000003001",
+      "name": "Block-Outside-to-Mgmt",
+      "action": "BLOCK",
+      "enabled": true,
+      "metadata": {"section": "Mandatory", "ruleIndex": 1},
+      "sourceZones": {"objects": [{"name": "outside", "type": "SecurityZone"}]},
+      "destinationZones": {"objects": [{"name": "mgmt", "type": "SecurityZone"}]},
+      "logEnd": true
+    },
+    {
+      "id": "00505680-1a2b-0ed3-0000-000000003002",
+      "name": "Allow-Users-to-DC-Web",
+      "action": "ALLOW",
+      "enabled": true,
+      "metadata": {"section": "Mandatory", "ruleIndex": 2},
+      "sourceZones": {"objects": [{"name": "inside", "type": "SecurityZone"}]},
+      "destinationZones": {"objects": [{"name": "dc", "type": "SecurityZone"}]},
+      "sourceNetworks": {"objects": [{"name": "user-lan", "type": "Network"}]},
+      "destinationNetworks": {"objects": [{"name": "dc-web-farm", "type": "Network"}]},
+      "destinationPorts": {"objects": [{"name": "WEB", "type": "PortObjectGroup"}]},
+      "ipsPolicy": {"name": "Balanced Security and Connectivity", "type": "IntrusionPolicy"},
+      "filePolicy": {"name": "Block-Malware", "type": "FilePolicy"},
+      "logEnd": true
+    },
+    {
+      "id": "00505680-1a2b-0ed3-0000-000000003003",
+      "name": "Allow-Vendor-Portal",
+      "action": "ALLOW",
+      "enabled": true,
+      "metadata": {"section": "Mandatory", "ruleIndex": 3},
+      "sourceZones": {"objects": [{"name": "dmz", "type": "SecurityZone"}]},
+      "destinationZones": {"objects": [{"name": "outside", "type": "SecurityZone"}]},
+      "destinationNetworks": {"objects": [{"name": "vendor-portal", "type": "FQDN"}]},
+      "destinationPorts": {"literals": [{"type": "PortLiteral", "protocol": "6", "port": "443"}]},
+      "ipsPolicy": {"name": "Balanced Security and Connectivity", "type": "IntrusionPolicy"},
+      "logEnd": true
+    },
+    {
+      "id": "00505680-1a2b-0ed3-0000-000000003004",
+      "name": "Block-Any-to-PCI",
+      "action": "BLOCK",
+      "enabled": true,
+      "metadata": {"section": "Default", "ruleIndex": 4},
+      "destinationZones": {"objects": [{"name": "pci", "type": "SecurityZone"}]},
+      "logEnd": true
+    }
+  ]
+}

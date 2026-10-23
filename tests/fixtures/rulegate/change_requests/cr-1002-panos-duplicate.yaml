@@ -1,0 +1,17 @@
+change_id: CR-1002
+ticket_ref: CHG0045830
+requester: app-team-portal
+business_justification: "Portal web tier needs the new admin API on 8443"
+target:
+  vendor: panos
+  device_group: DC-Core
+request:
+  action: allow
+  source_zone: web-dmz
+  source: ["10.20.30.5"]
+  destination_zone: app-trust
+  destination: ["10.30.10.20"]
+  application: ["any"]
+  service: ["tcp/8443"]
+  logging: true
+  security_profile_group: Strict-Inspection

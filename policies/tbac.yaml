@@ -37,7 +37,7 @@ tools:
     allowed_roles: [reviewer]
     keywords: [review, audit, risk, acl, acls, change, firewall, rules]
     scoped_args: [device]
-    description: Risk-review an ACL / firewall rule set or proposed change
+    description: Risk-review a proposed firewall change against the device's rulebase (RuleGate)
 
   push_config:
     change: true

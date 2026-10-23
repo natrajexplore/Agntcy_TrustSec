@@ -1,0 +1,19 @@
+change_id: CR-1003
+ticket_ref: CHG0045844
+requester: web-ops
+business_justification: "Troubleshooting connectivity, just open any/any for now"
+target:
+  vendor: panos
+  device_group: DC-Core
+request:
+  action: allow
+  source_zone: web-dmz
+  source: any
+  destination_zone: any
+  destination: any
+  application: any
+  service: any
+  logging: true
+  placement: top
+temporary: true
+expiry: 2026-10-11

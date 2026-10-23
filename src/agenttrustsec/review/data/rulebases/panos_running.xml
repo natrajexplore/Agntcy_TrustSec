@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<!-- Sanitized Panorama export: RFC 1918 / RFC 5737 addresses and fictional names only. -->
+<config version="11.1.0">
+  <shared>
+    <address>
+      <entry name="web-servers"><ip-netmask>10.20.30.0/27</ip-netmask></entry>
+      <entry name="app-servers"><ip-netmask>10.30.10.0/24</ip-netmask></entry>
+      <entry name="db-postgres-01"><ip-netmask>10.40.10.15/32</ip-netmask></entry>
+      <entry name="db-postgres-02"><ip-netmask>10.40.10.16/32</ip-netmask></entry>
+      <entry name="jump-hosts"><ip-range>10.99.0.10-10.99.0.12</ip-range></entry>
+      <entry name="internal-10"><ip-netmask>10.0.0.0/8</ip-netmask></entry>
+      <entry name="public-dns-resolver"><fqdn>resolver.example.net</fqdn></entry>
+      <entry name="pci-cde-net"><ip-netmask>10.50.0.0/24</ip-netmask></entry>
+    </address>
+    <address-group>
+      <entry name="db-postgres"><static><member>db-postgres-01</member><member>db-postgres-02</member></static></entry>
+      <entry name="dag-quarantine"><dynamic><filter>'quarantine'</filter></dynamic></entry>
+    </address-group>
+    <service>
+      <entry name="tcp-8443"><protocol><tcp><port>8443</port></tcp></protocol></entry>
+      <entry name="tcp-5432"><protocol><tcp><port>5432</port></tcp></protocol></entry>
+    </service>
+  </shared>
+  <devices>
+    <entry name="localhost.localdomain">
+      <device-group>
+        <entry name="DC-Core">
+          <pre-rulebase>
+            <security>
+              <rules>
+                <entry name="Block-DMZ-to-Mgmt" uuid="0b6a1e52-0001-4c1e-9d10-000000000001">
+                  <from><member>web-dmz</member><member>app-trust</member></from>
+                  <to><member>mgmt</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                  <log-end>yes</log-end>
+                </entry>
+                <entry name="Block-Quarantine" uuid="0b6a1e52-0002-4c1e-9d10-000000000002">
+                  <from><member>untrust</member></from>
+                  <to><member>any</member></to>
+                  <source><member>dag-quarantine</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>drop</action>
+                  <log-end>yes</log-end>
+                </entry>
+                <entry name="Allow-Web-to-App" uuid="0b6a1e52-0003-4c1e-9d10-000000000003">
+                  <from><member>web-dmz</member></from>
+                  <to><member>app-trust</member></to>
+                  <source><member>web-servers</member></source>
+                  <destination><member>app-servers</member></destination>
+                  <application><member>ssl</member><member>web-browsing</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                  <log-end>yes</log-end>
+                  <profile-setting><group><member>Strict-Inspection</member></group></profile-setting>
+                </entry>
+                <entry name="Allow-App-to-DB-Postgres" uuid="0b6a1e52-0004-4c1e-9d10-000000000004">
+                  <from><member>app-trust</member></from>
+                  <to><member>db-trust</member></to>
+                  <source><member>app-servers</member></source>
+                  <destination><member>db-postgres</member></destination>
+                  <application><member>postgres</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                  <log-end>yes</log-end>
+                  <profile-setting><group><member>Strict-Inspection</member></group></profile-setting>
+                </entry>
+                <entry name="Deny-DMZ-to-PCI" uuid="0b6a1e52-0005-4c1e-9d10-000000000005">
+                  <from><member>web-dmz</member></from>
+                  <to><member>pci-cde</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                  <log-end>yes</log-end>
+                </entry>
+                <entry name="Allow-DMZ-to-App-8443" uuid="0b6a1e52-0006-4c1e-9d10-000000000006">
+                  <from><member>web-dmz</member></from>
+                  <to><member>app-trust</member></to>
+                  <source><member>internal-10</member></source>
+                  <destination><member>internal-10</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>tcp-8443</member></service>
+                  <action>allow</action>
+                  <log-end>yes</log-end>
+                  <profile-setting><group><member>Strict-Inspection</member></group></profile-setting>
+                </entry>
+                <entry name="Allow-Mgmt-SSH" uuid="0b6a1e52-0007-4c1e-9d10-000000000007">
+                  <from><member>mgmt</member></from>
+                  <to><member>any</member></to>
+                  <source><member>jump-hosts</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>ssh</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                  <log-end>yes</log-end>
+                  <profile-setting><group><member>Strict-Inspection</member></group></profile-setting>
+                </entry>
+                <entry name="Allow-DNS-Out" uuid="0b6a1e52-0008-4c1e-9d10-000000000008">
+                  <from><member>app-trust</member><member>db-trust</member></from>
+                  <to><member>untrust</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>public-dns-resolver</member></destination>
+                  <application><member>dns</member></application>
+                  <service><member>application-default</member></service>
+                  <action>allow</action>
+                  <log-end>yes</log-end>
+                  <profile-setting><group><member>Strict-Inspection</member></group></profile-setting>
+                </entry>
+                <entry name="Old-Temp-Vendor-Access" uuid="0b6a1e52-0009-4c1e-9d10-000000000009">
+                  <from><member>untrust</member></from>
+                  <to><member>app-trust</member></to>
+                  <source><member>203.0.113.0/24</member></source>
+                  <destination><member>app-servers</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>allow</action>
+                  <disabled>yes</disabled>
+                </entry>
+              </rules>
+            </security>
+          </pre-rulebase>
+          <post-rulebase>
+            <security>
+              <rules>
+                <entry name="Cleanup-Deny-All" uuid="0b6a1e52-0099-4c1e-9d10-000000000099">
+                  <from><member>any</member></from>
+                  <to><member>any</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <application><member>any</member></application>
+                  <service><member>any</member></service>
+                  <action>deny</action>
+                  <log-end>yes</log-end>
+                </entry>
+              </rules>
+            </security>
+          </post-rulebase>
+        </entry>
+      </device-group>
+    </entry>
+  </devices>
+</config>

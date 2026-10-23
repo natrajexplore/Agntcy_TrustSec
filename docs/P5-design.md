@@ -80,9 +80,25 @@ every step → audit/decisions.jsonl
 6. Impostor joins the reviewer group under reviewer's name → group admission (`peer`).
 7. Revoked agent → `badge`.
 
+## 5b. P5a as built (2026-10-25)
+
+`src/agenttrustsec/review/`: RuleGate's analysis, parsers and models vendored verbatim (imports
+renamed, provenance line per file; `crew_outputs.py` and all CrewAI/LLM code left out) +
+`engine.py` (RuleGate `pipeline.py` logic; policy and rulebases from package `data/`, offline
+only). `tools/netops.py::review_change(device, change)` now runs it; the **lab device decides
+vendor + rulebase** (`edge-fw-01` → PAN-OS `DC-Core`, `edge-fw-02` → FTD `DC-Edge-ACP`); a
+caller-supplied `target` is ignored; unknown device / missing / invalid change → tool error.
+Proof of a faithful port: RuleGate's own deterministic tests ported (78), incl. its 11
+labelled scenarios — **exact decision, exact check IDs, human-review flag all match**.
+RuleGate treats unspecified request fields as `any`, so an empty request reviews as allow
+any/any → REJECT, score 100 (fail-safe).
+**Side effect:** the gateway's MCPServerBadge signs the tool inventory as issued; the new
+`review_change` signature/description make that inventory stale until the badge is re-issued
+(nothing checks drift yet — backlog item).
+
 ## 6. Work order (one PR each)
 
-* **P5a** vendor RuleGate core → `review/`; `review_change` uses it; tests incl. RuleGate's
+* **P5a** ✅ vendor RuleGate core → `review/`; `review_change` uses it; tests incl. RuleGate's
   own sample CRs (CR-1003 any/any must be rejected).
 * **P5b** agent runtime (identity, SLIM endpoint, `TrustedClient`) + `reader-01` + CLI.
 * **P5c** `intake-01`: session sealing, intent, routing, reviewer-group moderation.

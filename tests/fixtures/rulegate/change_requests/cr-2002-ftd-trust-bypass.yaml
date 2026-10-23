@@ -1,0 +1,16 @@
+change_id: CR-2002
+ticket_ref: CHG0046010
+requester: storage-team
+business_justification: "Nightly NFS backups are slow through inspection, please trust them"
+target:
+  vendor: ftd
+  device_group: DC-Edge-ACP
+request:
+  action: allow
+  source_zone: inside
+  source: ["10.10.200.0/28"]
+  destination_zone: dc
+  destination: ["10.60.6.0/24"]
+  service: ["tcp/2049", "udp/2049"]
+  logging: true
+  ftd_action: trust

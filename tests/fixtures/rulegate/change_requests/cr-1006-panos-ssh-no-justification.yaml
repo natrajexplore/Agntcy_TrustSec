@@ -1,0 +1,17 @@
+change_id: CR-1006
+requester: dba-team
+business_justification: "need ssh"
+target:
+  vendor: panos
+  device_group: DC-Core
+request:
+  action: allow
+  source_zone: app-trust
+  source: ["10.30.10.0/24"]
+  destination_zone: db-trust
+  destination: ["10.40.10.15"]
+  application: ["ssh"]
+  service: ["application-default"]
+  logging: false
+  security_profile_group: Strict-Inspection
+temporary: true

@@ -1,0 +1,16 @@
+change_id: CR-2005
+ticket_ref: CHG0046040
+requester: sales-ops
+business_justification: "Sales floor needs access to the intranet web farm"
+target:
+  vendor: ftd
+  device_group: DC-Edge-ACP
+request:
+  action: allow
+  source_zone: inside
+  source: ["10.10.5.0/24"]
+  destination_zone: dc
+  destination: ["10.60.1.20"]
+  service: ["tcp/443"]
+  logging: true
+  intrusion_policy: "Balanced Security and Connectivity"

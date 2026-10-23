@@ -1,0 +1,64 @@
+# RuleGate risk policy. Severity is decided here, never by an agent.
+
+# Points added to the risk score per finding (score is capped at 100).
+severity_weights:
+  critical: 40
+  high: 20
+  medium: 10
+  low: 5
+  info: 0
+
+# Override the default severity of any check (see README Risk Check Catalog).
+check_severity:
+  RG-001: critical
+  RG-002: high
+  RG-003: high
+  RG-004: medium
+  RG-005: medium
+  RG-006: high
+  RG-007: high
+  RG-008: high          # Prefilter Fastpath
+  RG-009: medium
+  RG-010: high
+  RG-011: high
+  RG-012: low
+  RG-013: info
+  RG-014: high
+  RG-015: critical
+  RG-016: high
+
+# RG-008 severity when the FTD action is Trust (Fastpath uses check_severity.RG-008).
+trust_action_severity: medium
+
+# RG-004: prefixes this broad or broader are flagged.
+broad_prefix:
+  ipv4: 16
+  ipv6: 48
+
+# RG-003 / RG-010: zones treated as untrusted.
+untrust_zones: [untrust, outside, internet]
+
+# RG-011: zones allowed to originate management traffic.
+management_zones: [mgmt, management, oob-mgmt]
+management_ports: [tcp/22, tcp/3389, udp/161, udp/162]
+management_https_ports: [tcp/443]   # only flagged when the destination is a management zone
+
+# RG-010: cleartext / legacy protocols.
+cleartext_ports_always: [tcp/23, tcp/21]
+cleartext_ports_from_untrust: [tcp/80, tcp/445, tcp/139]
+cleartext_apps_always: [telnet, ftp]
+cleartext_apps_from_untrust: [web-browsing, ms-ds-smb]
+
+# RG-007: protocols where an FTD File Policy is expected.
+file_policy_ports: [tcp/80, tcp/21, tcp/445, tcp/25]
+
+# RG-012
+min_justification_length: 15
+
+# RG-016: sensitive zones and the compliance references they carry.
+sensitive_zones:
+  pci-cde: ["PCI DSS v4.0 Req. 1.2", "PCI DSS v4.0 Req. 1.3", "SEC-STD-FW 4.1"]
+  pci: ["PCI DSS v4.0 Req. 1.2", "PCI DSS v4.0 Req. 1.3", "SEC-STD-FW 4.1"]
+  cde: ["PCI DSS v4.0 Req. 1.3", "SEC-STD-FW 4.1"]
+  ot: ["IEC 62443-3-3 SR 5.1", "SEC-STD-FW 4.3"]
+  mgmt: ["CIS Control 12.2", "SEC-STD-FW 4.2"]

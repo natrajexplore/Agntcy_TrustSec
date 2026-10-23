@@ -1,0 +1,18 @@
+change_id: CR-1004
+ticket_ref: CHG0045850
+requester: ecommerce-team
+business_justification: "Checkout web tier must call the tokenization service in the CDE"
+target:
+  vendor: panos
+  device_group: DC-Core
+request:
+  action: allow
+  source_zone: web-dmz
+  source: ["10.20.30.0/27"]
+  destination_zone: pci-cde
+  destination: ["10.50.0.10"]
+  application: ["ssl"]
+  service: ["application-default"]
+  logging: true
+  security_profile_group: Strict-Inspection
+  placement: bottom

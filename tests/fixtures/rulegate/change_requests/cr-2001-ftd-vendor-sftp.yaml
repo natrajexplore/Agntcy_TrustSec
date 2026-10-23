@@ -1,0 +1,16 @@
+change_id: CR-2001
+ticket_ref: CHG0046001
+requester: finance-integrations
+business_justification: "Bank partner uploads daily settlement files to our SFTP server"
+target:
+  vendor: ftd
+  device_group: DC-Edge-ACP
+request:
+  action: allow
+  source_zone: outside
+  source: ["198.51.100.25"]
+  destination_zone: dmz
+  destination: ["172.16.20.10"]
+  service: ["tcp/22"]
+  logging: true
+  intrusion_policy: "Balanced Security and Connectivity"

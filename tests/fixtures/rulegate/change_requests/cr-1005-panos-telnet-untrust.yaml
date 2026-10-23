@@ -1,0 +1,19 @@
+change_id: CR-1005
+ticket_ref: CHG0045861
+requester: facilities-vendor
+business_justification: "Vendor needs telnet to the legacy BMS controller"
+target:
+  vendor: panos
+  device_group: DC-Core
+request:
+  action: allow
+  source_zone: untrust
+  source: ["198.51.100.40"]
+  destination_zone: app-trust
+  destination: ["10.30.10.77"]
+  application: ["telnet"]
+  service: ["application-default"]
+  logging: true
+  security_profile_group: Strict-Inspection
+temporary: true
+expiry: null

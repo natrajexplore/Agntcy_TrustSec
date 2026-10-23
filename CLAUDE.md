@@ -61,6 +61,7 @@ src/agenttrustsec/
   audit/log.py         # JSONL audit writer
   tools/netops.py      # Mock network tools (show_*, push_config, ...)
   tools/extdata.py     # Mock external API (threat intel) — accepts brokered tokens only
+  review/              # P5a: RuleGate's deterministic firewall-change review core (no CrewAI/LLM)
   agents/              # Agent implementations (phase 5)
   transport/slim.py    # MCP over SLIM (MLS P2P); reports + pins the peer, gate decides
   transport/slim_group.py # Attested MLS group sessions: admission gate before any broadcast
@@ -114,7 +115,9 @@ tests/                 # pytest — must stay green
       TBAC from `policies/tbac.yaml` (done locally), then a real
       semantic checker in `authz/intent.py` (embeddings → optional LLM verifier).
       Evaluate it with `eval/astra_eval.py` on ASTRA test splits before trusting it.
-- [ ] **P5 Domain** — real agents: intake, reader (pyATS / mock), reviewer (port the
+- [ ] **P5 Domain** — design `docs/P5-design.md` (approved: E1–E5). P5a done: RuleGate core
+      vendored as `review/`, `review_change` runs it (78 ported RuleGate tests pass). Next: P5b
+      agent runtime + reader. Real agents: intake, reader (pyATS / mock), reviewer (port the
       CrewAI Palo Alto / FTD change reviewer), executor. Add the rogue agent.
 - [ ] **P6 Observe & benchmark** — dashboard of ALLOW/BLOCK decisions; latency and
       block-rate numbers (optionally via `outshift-open/mas-lab`); README diagrams.

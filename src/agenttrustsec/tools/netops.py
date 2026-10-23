@@ -1,9 +1,12 @@
-"""Mock network tools. LAB ONLY — swap for pyATS / CML / DevNet sandbox in P5.
+"""Network tools. LAB ONLY — device tools are mocks (swap for pyATS / CML / DevNet sandbox).
 
 `push_config` records what would have been pushed so tests can prove a blocked call
-never reached the device.
+never reached the device. `review_change` runs RuleGate's deterministic review engine
+(agenttrustsec.review, P5a) against the lab device's rulebase.
 """
 from __future__ import annotations
+
+from typing import Any
 
 PUSHED: list[dict] = []
 
@@ -28,9 +31,13 @@ def show_bgp_neighbors(device: str) -> list[dict]:
     return [{"neighbor": "192.0.2.1", "state": "Established", "asn": 65001}]
 
 
-def review_change(device: str, change: str = "") -> dict:
-    findings = [r for r in _ACLS.get(device, []) if "any any" in r and r.startswith("permit")]
-    return {"device": device, "risk": "high" if findings else "low", "findings": findings}
+def review_change(device: str, change: dict[str, Any] | None = None) -> dict:
+    """Review a proposed firewall change (RuleGate change-request schema, `target` omitted:
+    the device decides vendor and rulebase). Decision and findings are deterministic."""
+    from agenttrustsec.review.engine import review_for_device, summary
+    if not change:
+        raise ValueError("review_change needs a change request (RuleGate schema, without target)")
+    return {"device": device, **summary(review_for_device(device, change))}
 
 
 def push_config(device: str, lines: list[str]) -> str:

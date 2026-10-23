@@ -1,0 +1,16 @@
+change_id: CR-2003
+ticket_ref: CHG0046020
+requester: payments-platform
+business_justification: "High-volume card authorization traffic to the CDE switch cluster"
+target:
+  vendor: ftd
+  device_group: DC-Edge-ACP
+request:
+  action: allow
+  source_zone: inside
+  source: ["10.10.50.0/24"]
+  destination_zone: pci
+  destination: ["10.70.0.20"]
+  service: ["tcp/8583"]
+  logging: true
+  prefilter_fastpath: true

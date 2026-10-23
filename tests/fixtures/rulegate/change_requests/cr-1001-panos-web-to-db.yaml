@@ -1,0 +1,19 @@
+change_id: CR-1001
+ticket_ref: CHG0045821
+requester: app-team-payments
+business_justification: "New payments API must query the transaction DB"
+target:
+  vendor: panos
+  device_group: DC-Core
+request:
+  action: allow
+  source_zone: web-dmz
+  source: ["10.20.30.0/27"]
+  destination_zone: db-trust
+  destination: ["10.40.10.15"]
+  application: ["postgres"]
+  service: ["tcp/5432"]
+  logging: true
+  security_profile_group: Strict-Inspection
+temporary: false
+expiry: null

@@ -599,22 +599,19 @@ PAGE = r"""<!doctype html>
 <title>AgentTrustSec Control Center</title>
 <style>
 /*CSS*/
-:root { --warn: #b7791f; --warn-text: #8a5a12; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --warn: #d69e2e; --warn-text: #e0b25c; } }
-:root[data-theme="dark"] { --warn: #d69e2e; --warn-text: #e0b25c; }
-nav { display: flex; gap: 6px; }
-nav a { color: var(--ink-2); text-decoration: none; border: 1px solid var(--axis); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
-nav a[aria-current="page"] { color: var(--ink); border-color: var(--ink-2); font-weight: 600; }
 .warnc { color: var(--warn-text); } .warnc .dot { background: var(--warn); }
-.layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 12px; }
-.layer { display: flex; flex-direction: column; gap: 8px; }
-.layer.failing { border-color: var(--critical); }
+.layers { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 14px; }
+.layer { display: flex; flex-direction: column; gap: 10px; border-top: 2px solid var(--muted); }
+.layer.verified { border-top-color: var(--good); } .layer.failing { border-top-color: var(--critical); }
+.layer.not-verified { border-top-color: var(--muted); }
+.section-h { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 12px; }
+.section-h h2 { margin: 0; font-size: 20px; font-weight: 400; letter-spacing: -.01em; }
 .lhead { display: flex; align-items: baseline; gap: 8px; }
 .lnum { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; min-width: 18px; }
-.lname { font-weight: 650; font-size: 15px; flex: 1; }
+.lname { font-weight: 600; font-size: 16px; letter-spacing: -.01em; flex: 1; }
 .ana { color: var(--ink-2); font-size: 12px; } .stops { font-size: 13px; }
 .where { display: flex; flex-wrap: wrap; gap: 4px; }
-.where span { background: var(--wash); border-radius: 4px; padding: 1px 6px; }
+.where span { background: var(--wash); color: var(--accent-text); border-radius: 999px; padding: 2px 9px; }
 .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .items li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; font-size: 13px; }
 .items .ic { font-weight: 700; } .items .ic.t { color: var(--good-text); } .items .ic.f { color: var(--critical-text); }
@@ -626,21 +623,25 @@ details ul { margin: 6px 0 0; padding-left: 18px; }
 .health { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 8px 16px; }
 .health div { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: baseline; }
 .health .hd { grid-column: 2; color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
-.runbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
-button.primary { color: var(--page); background: var(--ink); border-color: var(--ink); font-weight: 600; }
+.runbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 22px; }
+.runbar .sub { color: #C2CCDA; } .runbar .note { color: #94A3B8; }
+.runbar .mono { color: #C2CCDA; }
 button[disabled] { opacity: .6; cursor: progress; }
 .note { color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>AgentTrustSec Control Center</h1>
-    <span class="sub" id="meta"></span>
-    <span style="flex:1"></span>
-    <nav aria-label="Views"><a href="./">Decisions</a><a href="control" aria-current="page">Control Center</a></nav>
-    <button id="theme" type="button" aria-label="Toggle light or dark theme">Theme</button>
-  </header>
+<div class="topbar"><div class="wrap">
+  <span class="brand"><svg class="mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><defs><linearGradient id="mk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A8DFF"/><stop offset="1" stop-color="#0A60FF"/></linearGradient></defs><path d="M12 2.5 4 5.6v6.1c0 4.6 3.3 8.6 8 9.8 4.7-1.2 8-5.2 8-9.8V5.6L12 2.5Z" fill="url(#mk)"/><path d="m8.4 12.2 2.6 2.6 4.8-5.1" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>AgentTrustSec</span>
+  <span class="tagline">Zero-trust for AI agents · lab</span>
+  <span class="grow"></span>
+  <nav class="tabs" aria-label="Views"><a href="./">Decisions</a><a href="control" aria-current="page">Control Center</a></nav>
+  <button id="theme" type="button" aria-label="Toggle light or dark theme">Theme</button>
+</div></div>
+<section class="hero"><div class="wrap">
+  <div class="eyebrow">Control Center</div>
+  <h1>Is every security control working right now?</h1>
+  <div class="sub" id="meta"></div>
   <section class="tiles" id="tiles"></section>
   <div class="runbar">
     <button class="primary" id="run" type="button">Run checks</button>
@@ -648,7 +649,10 @@ button[disabled] { opacity: .6; cursor: progress; }
     <span class="note">Read-only probes against the lab (~10 s). They change nothing; the full attack demo stays
       <span class="mono">python -m agenttrustsec.demo_live</span>.</span>
   </div>
-  <section class="card" style="margin-bottom:12px"><h2>Health</h2><div class="health" id="health"></div></section>
+</div></section>
+<main>
+  <section class="card"><h2>Health</h2><div class="health" id="health"></div></section>
+  <div class="section-h"><h2>Defence in depth</h2><span class="sub">11 layers + audit, in the order a request meets them</span></div>
   <section class="layers" id="layers"></section>
   <p class="legend">A layer is <b>Verified</b> only when every piece of its evidence is present and good: audit records
     from the latest live demo, that demo's expected-vs-actual result, and the read-only probes. Missing evidence is
@@ -725,11 +729,12 @@ button[disabled] { opacity: .6; cursor: progress; }
     } catch (e) { $("runmsg").textContent = "Server not reachable."; }
     b.disabled = false;
   });
-  $("theme").addEventListener("click", () => {
+  $("theme").addEventListener("click", () => {      // navy is the default; light is one click away
     const root = document.documentElement;
-    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-    root.dataset.theme = dark ? "light" : "dark";
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+    try { localStorage.setItem("ats-theme", root.dataset.theme); } catch (e) { /* storage blocked: fine */ }
   });
+  try { const t = localStorage.getItem("ats-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
   render();
   setInterval(refresh, 5000);
 })();

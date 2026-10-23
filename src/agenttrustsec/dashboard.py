@@ -206,52 +206,87 @@ PAGE = r"""<!doctype html>
 <title>AgentTrustSec Decisions</title>
 <style>
 :root {
-  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
-  --bar: #2a78d6; --good: #0ca30c; --good-text: #006300; --critical: #d03b3b; --critical-text: #b12f2f;
-  --wash: rgba(42,120,214,0.08);
+  /* navy (default) - contrast-checked: every text pair >= 4.5:1, every mark >= 3:1 */
+  --page: #07182D; --surface: #0C2140; --surface-2: #0F2A4F; --ink: #F4F7FB; --ink-2: #C2CCDA; --muted: #94A3B8;
+  --grid: #18355C; --axis: #24466F; --ring: rgba(255,255,255,0.10);
+  --bar: #3A8DFF; --accent: #0A60FF; --accent-text: #6CB2FF;
+  --good: #22C55E; --good-text: #4ADE80; --critical: #F05252; --critical-text: #FF8A8A;
+  --warn: #F59E0B; --warn-text: #FBBF4C; --wash: rgba(58,141,255,0.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.25), 0 8px 24px rgba(0,0,0,.18);
+  color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
-    --bar: #5598e7; --good: #0ca30c; --good-text: #0ca30c; --critical: #d03b3b; --critical-text: #ec6a6a;
-    --wash: rgba(85,152,231,0.12);
-  }
-}
-:root[data-theme="dark"] {
-  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
-  --bar: #5598e7; --good: #0ca30c; --good-text: #0ca30c; --critical: #d03b3b; --critical-text: #ec6a6a;
-  --wash: rgba(85,152,231,0.12);
+:root[data-theme="light"] {
+  --page: #F5F7FA; --surface: #FFFFFF; --surface-2: #F0F3F8; --ink: #07182D; --ink-2: #3D4B61; --muted: #5E6B7E;
+  --grid: #E3E8EF; --axis: #CBD3DF; --ring: rgba(7,24,45,0.10);
+  --bar: #0A60FF; --accent: #0A60FF; --accent-text: #0A57E8;
+  --good: #1E9E52; --good-text: #13703A; --critical: #D92D20; --critical-text: #B42318;
+  --warn: #B76E00; --warn-text: #8A5300; --wash: rgba(10,96,255,0.06);
+  --shadow: 0 1px 2px rgba(7,24,45,.06), 0 8px 24px rgba(7,24,45,.06);
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--page); color: var(--ink);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 16px; }
-h1 { font-size: 20px; margin: 0; } h2 { font-size: 15px; margin: 0 0 10px; }
+body { margin: 0; background: var(--page); color: var(--ink); -webkit-font-smoothing: antialiased;
+  font: 14px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+main { max-width: 1280px; margin: 0 auto; padding: 28px 24px 56px; }
+@media (max-width: 640px) { .wrap, main { padding-left: 16px; padding-right: 16px; } }
+
+/* top bar + hero: always navy, the brand frame in both themes */
+.topbar { background: #061426; border-bottom: 1px solid rgba(255,255,255,.08); color: #F4F7FB; }
+.topbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; min-height: 60px; padding-top: 8px; padding-bottom: 8px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: -.01em; color: #fff; }
+.mark { flex: none; display: block; }
+.tagline { color: #94A3B8; font-size: 12px; }
+.grow { flex: 1; }
+.tabs[hidden] { display: none; }
+.tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.10); }
+.tabs a { color: #C2CCDA; text-decoration: none; font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 999px; }
+.tabs a:hover { color: #fff; background: rgba(255,255,255,.06); }
+.tabs a[aria-current="page"] { color: #07182D; background: #F4F7FB; }
+.tabs a:focus-visible, .btn:focus-visible, button:focus-visible { outline: 2px solid #6CB2FF; outline-offset: 2px; }
+.hero { color: #F4F7FB; border-bottom: 1px solid rgba(255,255,255,.06);
+  background: radial-gradient(900px 340px at 88% -20%, rgba(58,141,255,.30), transparent 65%),
+              radial-gradient(700px 300px at -5% 120%, rgba(10,96,255,.22), transparent 60%), #07182D; }
+.hero .wrap { padding-top: 36px; padding-bottom: 32px; }
+.eyebrow { color: #6CB2FF; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.hero h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.12; font-weight: 300; letter-spacing: -.02em; margin: 8px 0 10px; color: #fff; }
+.hero .sub { color: #C2CCDA; }
+.hero .tiles { margin: 26px 0 0; }
+.hero .tile { background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-left: 2px solid #3A8DFF;
+  border-radius: 10px; box-shadow: none; padding: 14px 16px; }
+.hero .tile .k { color: #C2CCDA; } .hero .tile .d { color: #94A3B8; }
+.hero .tile .v { color: #fff; font-size: 36px; font-weight: 300; letter-spacing: -.02em; }
+
+h1 { font-size: 20px; margin: 0; } h2 { font-size: 16px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 12px; }
 .sub { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
-.live { color: var(--good-text); font-weight: 600; }
-.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 16px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.tile .k { color: var(--ink-2); font-size: 12px; } .tile .v { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.live { color: #4ADE80; font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 18px; box-shadow: var(--shadow); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.tile .k { color: var(--ink-2); font-size: 12px; font-weight: 500; } .tile .v { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile .d { color: var(--muted); font-size: 12px; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.pill { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-size: 12px; white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 14px; margin-bottom: 14px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 12px; white-space: nowrap; }
 .pill .dot { width: 8px; height: 8px; border-radius: 50%; }
 .allow { color: var(--good-text); } .allow .dot { background: var(--good); }
 .block { color: var(--critical-text); } .block .dot { background: var(--critical); }
 .other { color: var(--ink-2); } .other .dot { background: var(--muted); }
-.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-select, input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--axis);
-  border-radius: 6px; padding: 5px 8px; min-width: 0; }
-input[type=search] { flex: 1 1 180px; }
-button { font: inherit; color: var(--ink-2); background: transparent; border: 1px solid var(--axis); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+select, input { font: inherit; color: var(--ink); background: var(--surface-2); border: 1px solid var(--axis);
+  border-radius: 999px; padding: 6px 12px; min-width: 0; }
+select:focus-visible, input:focus-visible { outline: 2px solid var(--bar); outline-offset: 1px; }
+input[type=search] { flex: 1 1 200px; }
+button, .btn { font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--axis);
+  border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+button:hover { border-color: var(--ink-2); }
+.topbar button { color: #F4F7FB; border-color: rgba(255,255,255,.22); }
+.topbar button:hover { border-color: rgba(255,255,255,.5); }
+button.primary { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.1); }
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
-td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  padding: 8px 10px; border-bottom: 1px solid var(--axis); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
 tr.r { cursor: pointer; } tr.r:hover { background: var(--wash); }
 tr.r:focus-visible { outline: 2px solid var(--bar); outline-offset: -2px; }
 td.reason { color: var(--ink-2); max-width: 520px; }
@@ -260,32 +295,36 @@ td.num { text-align: right; white-space: nowrap; }
 tr.x td { background: var(--wash); }
 .checks td { border: none; padding: 3px 8px; }
 .unv { color: var(--critical-text); font-weight: 700; }
-.legend { color: var(--muted); font-size: 12px; margin-top: 8px; }
-.bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 6px 10px; align-items: center; }
+.legend { color: var(--muted); font-size: 12px; margin-top: 10px; }
+.bars { display: grid; grid-template-columns: max-content 1fr max-content; gap: 8px 12px; align-items: center; }
 .bars .lbl { color: var(--ink-2); font-size: 12px; }
 .bars .track { height: 14px; position: relative; }
 .bars .fill { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
 .bars .val { font-size: 12px; font-variant-numeric: tabular-nums; }
 .bars .hit { cursor: default; }
 .bars .hit:hover .fill { filter: brightness(1.15); }
-#tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
-  border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 10; }
+#tip { position: fixed; pointer-events: none; background: var(--surface-2); color: var(--ink); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: var(--shadow); display: none; z-index: 10; }
 .empty { color: var(--muted); padding: 12px 0; }
-@media (max-width: 640px) { .hide-sm { display: none; } }
+.foot { color: var(--muted); font-size: 12px; border-top: 1px solid var(--grid); margin-top: 28px; padding-top: 16px; }
+@media (max-width: 640px) { .hide-sm { display: none; } .tagline { display: none; } }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>AgentTrustSec decisions</h1>
-    <span class="sub" id="meta"></span>
-    <span style="flex:1"></span>
-    <nav id="nav" aria-label="Views" hidden style="gap:6px"><a href="./" aria-current="page"
-      style="color:var(--ink);text-decoration:none;border:1px solid var(--ink-2);border-radius:6px;padding:5px 10px;font-size:13px;font-weight:600">Decisions</a><a href="control"
-      style="color:var(--ink-2);text-decoration:none;border:1px solid var(--axis);border-radius:6px;padding:5px 10px;font-size:13px">Control Center</a></nav>
-    <button id="theme" type="button" aria-label="Toggle light or dark theme">Theme</button>
-  </header>
+<div class="topbar"><div class="wrap">
+  <span class="brand"><svg class="mark" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><defs><linearGradient id="mk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3A8DFF"/><stop offset="1" stop-color="#0A60FF"/></linearGradient></defs><path d="M12 2.5 4 5.6v6.1c0 4.6 3.3 8.6 8 9.8 4.7-1.2 8-5.2 8-9.8V5.6L12 2.5Z" fill="url(#mk)"/><path d="m8.4 12.2 2.6 2.6 4.8-5.1" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>AgentTrustSec</span>
+  <span class="tagline">Zero-trust for AI agents · lab</span>
+  <span class="grow"></span>
+  <nav class="tabs" id="nav" aria-label="Views" hidden><a href="./" aria-current="page">Decisions</a><a href="control">Control Center</a></nav>
+  <button id="theme" type="button" aria-label="Toggle light or dark theme">Theme</button>
+</div></div>
+<section class="hero"><div class="wrap">
+  <div class="eyebrow">Decisions</div>
+  <h1>Every call, admission and dispatch</h1>
+  <div class="sub" id="meta"></div>
   <section class="tiles" id="tiles"></section>
+</div></section>
+<main>
   <section class="grid2">
     <div class="card"><h2>Blocks by check</h2><div id="byCheck"></div></div>
     <div class="card"><h2>Decision time (gate, all checks)</h2><div id="latency"></div>
@@ -500,13 +539,14 @@ tr.x td { background: var(--wash); }
   for (const [id] of FILTERS) $(id).addEventListener("change", log);
   $("f-q").addEventListener("input", log);
   $("f-clear").addEventListener("click", () => { for (const [id] of FILTERS) $(id).value = ""; $("f-q").value = ""; log(); });
-  $("theme").addEventListener("click", () => {
+  $("theme").addEventListener("click", () => {      // navy is the default; light is one click away
     const root = document.documentElement;
-    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-    root.dataset.theme = dark ? "light" : "dark";
+    root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+    try { localStorage.setItem("ats-theme", root.dataset.theme); } catch (e) { /* storage blocked: fine */ }
   });
+  try { const t = localStorage.getItem("ats-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
   renderAll();
-  if (DATA.live) { const nav = $("nav"); nav.hidden = false; nav.style.display = "flex"; }   // /control exists only when served
+  if (DATA.live) $("nav").hidden = false;   // /control exists only when served
   if (DATA.live) setInterval(() => {
     fetch("data.json", {cache: "no-store"}).then((r) => r.json()).then((d) => { DATA = {...d, live: true}; renderAll(); })
       .catch(() => {});
